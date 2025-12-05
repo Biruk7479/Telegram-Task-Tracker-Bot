@@ -32,7 +32,7 @@ export interface Task {
   xpReward: number;
   active: boolean;
   createdBy: string;
-  assignedTo?: string[];
+  assignedTo?: string[]; // Array of user IDs
 }
 
 export interface Completion {

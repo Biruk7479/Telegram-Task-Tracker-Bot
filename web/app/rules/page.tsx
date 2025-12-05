@@ -90,7 +90,8 @@ export default function RulesPage() {
                 <ol className="space-y-3 list-decimal list-inside">
                   <li className="text-lg">At midnight, the system counts how many tasks each person missed (didn't confirm)</li>
                   <li className="text-lg">It calculates the <span className="font-bold">difference</span> in missed tasks</li>
-                  <li className="text-lg">The penalty (difference × 10 XP) is subtracted from whoever has <span className="font-bold text-red-600">LOWER XP</span></li>
+                  <li className="text-lg">The person who missed <span className="font-bold text-red-600">MORE</span> tasks gets their XP set to: <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">lowest XP - (difference × 10)</span></li>
+                  <li className="text-lg">The other person's XP stays unchanged</li>
                 </ol>
               </div>
 
@@ -99,25 +100,25 @@ export default function RulesPage() {
                 <div className="space-y-2 font-mono text-sm bg-gray-50 dark:bg-gray-900 p-4 rounded">
                   <p>📊 Current Status:</p>
                   <p className="ml-4">• Person A: 80 XP</p>
-                  <p className="ml-4">• Person B: 90 XP</p>
+                  <p className="ml-4">• Person B: 100 XP</p>
                   <p className="mt-3">📅 Day's Missed Tasks:</p>
-                  <p className="ml-4">• Person A: 1 missed</p>
-                  <p className="ml-4">• Person B: 2 missed</p>
+                  <p className="ml-4">• Person A: 2 missed</p>
+                  <p className="ml-4">• Person B: 3 missed</p>
                   <p className="mt-3">⚖️ Differential Calculation:</p>
-                  <p className="ml-4">• Difference: 2 - 1 = 1 task</p>
-                  <p className="ml-4">• Penalty: 1 × 10 = 10 XP</p>
-                  <p className="ml-4 text-red-600 dark:text-red-400 font-bold">• Applied to: Person A (has lower XP)</p>
+                  <p className="ml-4">• Difference: 3 - 2 = 1 task</p>
+                  <p className="ml-4">• Person B missed more (3 vs 2)</p>
+                  <p className="ml-4">• Lowest current XP: 80 (Person A)</p>
+                  <p className="ml-4">• New XP for Person B: 80 - (1 × 10) = 70</p>
                   <p className="mt-3">📊 Final Result:</p>
-                  <p className="ml-4 text-red-600 dark:text-red-400">• Person A: 80 → <span className="font-bold">70 XP</span></p>
-                  <p className="ml-4">• Person B: 90 XP (no change)</p>
+                  <p className="ml-4">• Person A: 80 XP (no change)</p>
+                  <p className="ml-4 text-red-600 dark:text-red-400">• Person B: 100 → <span className="font-bold">70 XP</span></p>
                 </div>
               </div>
 
               <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mt-4 border border-yellow-300 dark:border-yellow-700">
                 <p className="text-lg font-bold text-yellow-800 dark:text-yellow-300">⚠️ Key Insight:</p>
                 <p className="text-lg text-yellow-900 dark:text-yellow-200 mt-2">
-                  The penalty is always applied to whoever has lower XP, regardless of who missed more tasks. 
-                  This creates a "catch-up" mechanism where if you're already behind, missing tasks makes it even harder to catch up!
+                  The person who missed MORE tasks loses XP based on the lowest current XP. This means if you're behind and miss more, you get penalized relative to where the lowest person is, not from your own XP!
                 </p>
               </div>
 
@@ -125,7 +126,7 @@ export default function RulesPage() {
                 <h3 className="font-bold text-lg mb-2 text-gray-900 dark:text-white">Special Cases:</h3>
                 <ul className="space-y-2 text-gray-700 dark:text-gray-300">
                   <li>• If both miss equal tasks → No penalty for anyone</li>
-                  <li>• If XP is tied → Person who missed more tasks gets penalized</li>
+                  <li>• If XP is tied → Person who missed more still gets penalized using the formula</li>
                   <li>• Penalty cannot take XP below 0 (minimum is 0 XP)</li>
                 </ul>
               </div>
