@@ -215,10 +215,14 @@ async function fixPendingTasks() {
       }
     }
     
-    // Now apply differential penalties per day
+    // Now apply differential penalties per day (CHRONOLOGICALLY)
     let totalPenaltiesApplied = 0;
     
-    for (const [dateKey, userMissedCounts] of Object.entries(missedTasksByDay)) {
+    // Sort dates chronologically
+    const sortedDates = Object.keys(missedTasksByDay).sort();
+    
+    for (const dateKey of sortedDates) {
+      const userMissedCounts = missedTasksByDay[dateKey];
       const userIds = Object.keys(userMissedCounts);
       
       console.log(`\n📅 Date: ${dateKey}`);

@@ -82,6 +82,12 @@ export default function Home() {
               >
                 Tasks
               </button>
+              <a
+                href="/rules"
+                className="px-5 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+              >
+                Rules
+              </a>
             </div>
           </div>
         </div>
