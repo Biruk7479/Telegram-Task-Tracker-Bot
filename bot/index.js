@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const config = require('./config');
 const connectDB = require('./database/connection');
 const { getOrCreateUser, recordCompletion, getUserStats, getLeaderboard } = require('./services/userService');
-const { createTask, getActiveTasks, deleteTask, updateTask, getTasksDueNow, parseTime, parseDays, parseCustomDays } = require('./services/taskService');
+const { createTask, getActiveTasks, deleteTask, updateTask, getTasksDueNow, parseTime, parseDays, parseCustomDays, isTaskPastDeadline, isTaskScheduledForDate } = require('./services/taskService');
 const { checkAndResetWeek, checkMissedConfirmations, handleWeekEnd } = require('./services/weeklyXpService');
 const cron = require('node-cron');
 
@@ -53,6 +53,7 @@ I'll help you and your partner stay productive and accountable!
 /edittask - Edit an existing task
 /listtasks - View all active tasks
 /deletetask - Remove a task
+/markdone - Mark a task as completed in advance
 /mystats - View your stats and XP
 /leaderboard - Compare progress
 /stop - Cancel current action
@@ -812,6 +813,31 @@ bot.on('callback_query', async (query) => {
     const taskId = data.replace('markdone_', '');
     
     try {
+      const { Task } = require('./database/models');
+      const task = await Task.findById(taskId);
+      
+      if (!task) {
+        bot.answerCallbackQuery(query.id, {
+          text: '❌ Task not found!',
+          show_alert: true
+        });
+        return;
+      }
+      
+      // Check if task is past deadline
+      if (isTaskPastDeadline(task)) {
+        bot.answerCallbackQuery(query.id, {
+          text: '⏰ Time has passed for this task. You can only mark tasks as done on their scheduled day!',
+          show_alert: true
+        });
+        
+        bot.editMessageText('❌ This task is past its deadline and cannot be marked as done.', {
+          chat_id: chatId,
+          message_id: query.message.message_id
+        });
+        return;
+      }
+      
       await getOrCreateUser(userId, username);
       const result = await recordCompletion(taskId, userId, true, true); // Pass true for advance completion
       
@@ -1017,6 +1043,29 @@ bot.on('callback_query', async (query) => {
       show_alert: true
     });
     return;
+  }
+  
+  // Check if task is past deadline
+  try {
+    const { Task } = require('./database/models');
+    const task = await Task.findById(taskId);
+    
+    if (task && isTaskPastDeadline(task)) {
+      bot.answerCallbackQuery(query.id, {
+        text: '⏰ Time has passed for this task. Confirmation is no longer valid!',
+        show_alert: true
+      });
+      
+      // Remove the buttons
+      bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        { chat_id: chatId, message_id: query.message.message_id }
+      );
+      
+      return;
+    }
+  } catch (error) {
+    console.error('Error checking task deadline:', error);
   }
   
   try {

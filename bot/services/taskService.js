@@ -185,6 +185,89 @@ const parseCustomDays = (daysStr) => {
   return result.length > 0 ? result : null;
 };
 
+// Check if a task was scheduled for a specific date
+const isTaskScheduledForDate = (task, targetDate) => {
+  const dayOfWeek = targetDate.getDay();
+  
+  if (task.type === 'daily') {
+    return true;
+  }
+  
+  if (task.type === 'weekly' || task.type === 'custom') {
+    return task.schedule.days && task.schedule.days.includes(dayOfWeek);
+  }
+  
+  if (task.type === 'one-time' && task.schedule?.date) {
+    const taskDate = new Date(task.schedule.date);
+    const taskDateStr = `${taskDate.getFullYear()}-${(taskDate.getMonth() + 1).toString().padStart(2, '0')}-${taskDate.getDate().toString().padStart(2, '0')}`;
+    const targetDateStr = `${targetDate.getFullYear()}-${(targetDate.getMonth() + 1).toString().padStart(2, '0')}-${targetDate.getDate().toString().padStart(2, '0')}`;
+    return taskDateStr === targetDateStr;
+  }
+  
+  // Flexible tasks can be done anytime
+  if (task.type === 'flexible') {
+    return true;
+  }
+  
+  return false;
+};
+
+// Check if it's too late to mark a task as done or confirm it
+const isTaskPastDeadline = (task) => {
+  // Flexible tasks never expire
+  if (task.type === 'flexible') {
+    return false;
+  }
+  
+  // Tasks without schedule time are flexible-like
+  if (!task.schedule || !task.schedule.time) {
+    return false;
+  }
+  
+  const localNow = getLocalTime();
+  const today = new Date(localNow);
+  today.setHours(0, 0, 0, 0);
+  
+  // Check if task was scheduled for today
+  const scheduledToday = isTaskScheduledForDate(task, today);
+  
+  if (!scheduledToday) {
+    // Task is not scheduled for today, check if it was scheduled for yesterday or earlier
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // For one-time tasks, check if the task date has passed
+    if (task.type === 'one-time' && task.schedule?.date) {
+      const taskDate = new Date(task.schedule.date);
+      taskDate.setHours(0, 0, 0, 0);
+      
+      // If task date is before today, it's past deadline
+      if (taskDate < today) {
+        return true;
+      }
+      
+      // If task date is in the future, it's not past deadline
+      return false;
+    }
+    
+    // For recurring tasks (daily, weekly, custom), if not scheduled today
+    // we need to check if it was scheduled yesterday or earlier and that day has passed
+    // Allow marking done up until the scheduled day ends (midnight next day)
+    const wasScheduledYesterday = isTaskScheduledForDate(task, yesterday);
+    
+    if (wasScheduledYesterday) {
+      // Yesterday's tasks are past deadline
+      return true;
+    }
+    
+    // Not scheduled today or yesterday, so can't be done now
+    return true;
+  }
+  
+  // Task is scheduled for today - it's valid to mark done or confirm
+  return false;
+};
+
 module.exports = {
   createTask,
   getActiveTasks,
@@ -195,4 +278,6 @@ module.exports = {
   parseTime,
   parseDays,
   parseCustomDays,
+  isTaskScheduledForDate,
+  isTaskPastDeadline,
 };

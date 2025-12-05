@@ -148,6 +148,15 @@ async function checkMissedConfirmations() {
   const tasks = await Task.find({ active: true });
   const { parseTime } = require('./taskService');
   
+  // Track missed tasks per user
+  const missedTasksPerUser = {};
+  const users = await User.find();
+  
+  // Initialize counters
+  for (const user of users) {
+    missedTasksPerUser[user.telegramId] = 0;
+  }
+  
   for (const task of tasks) {
     // Check if task was scheduled for yesterday based on task type
     const wasScheduledYesterday = isTaskScheduledForYesterday(task, yesterday);
@@ -174,9 +183,6 @@ async function checkMissedConfirmations() {
       }
     }
 
-    // Get snapshot of users for fair simultaneous penalty calculation
-    const users = await User.find();
-    
     for (const user of users) {
       // Check if user is assigned to this task
       if (task.assignedTo && task.assignedTo.length > 0 && !task.assignedTo.includes(user.telegramId)) {
@@ -190,9 +196,100 @@ async function checkMissedConfirmations() {
         completedAt: { $gte: yesterday, $lt: today },
       });
       
-      // If no completion record, apply penalty using the snapshot
+      // If no completion record, count as missed
       if (!completion) {
-        await applyMissedConfirmationPenalty(user.telegramId, task._id, users);
+        missedTasksPerUser[user.telegramId]++;
+        
+        // Create missed completion record
+        await Completion.create({
+          taskId: task._id,
+          userId: user.telegramId,
+          completed: false,
+          xpPenalty: 0, // Will be calculated after comparing all users
+          missedConfirmation: true,
+          completedAt: new Date(),
+          scheduledFor: yesterday,
+        });
+      }
+    }
+  }
+  
+  // Now calculate differential penalties
+  // Penalty is applied to whoever has LOWER XP
+  const userIds = Object.keys(missedTasksPerUser);
+  
+  if (userIds.length === 2) {
+    const [user1Id, user2Id] = userIds;
+    const user1Missed = missedTasksPerUser[user1Id];
+    const user2Missed = missedTasksPerUser[user2Id];
+    
+    console.log(`\n📊 Missed task comparison:`);
+    console.log(`   User ${user1Id}: ${user1Missed} missed`);
+    console.log(`   User ${user2Id}: ${user2Missed} missed`);
+    
+    // Get both users' current XP
+    const user1 = await User.findOne({ telegramId: user1Id });
+    const user2 = await User.findOne({ telegramId: user2Id });
+    
+    if (user1 && user2 && user1Missed !== user2Missed) {
+      // Determine who missed more tasks
+      const diff = Math.abs(user1Missed - user2Missed);
+      const penalty = diff * 10;
+      
+      // Apply penalty to whoever has LOWER XP
+      let penalizedUser;
+      
+      if (user1.weeklyXp < user2.weeklyXp) {
+        penalizedUser = user1;
+      } else if (user2.weeklyXp < user1.weeklyXp) {
+        penalizedUser = user2;
+      } else {
+        // Equal XP - penalize whoever missed more
+        penalizedUser = user1Missed > user2Missed ? user1 : user2;
+      }
+      
+      penalizedUser.weeklyXp = Math.max(0, penalizedUser.weeklyXp - penalty);
+      await penalizedUser.save();
+      
+      console.log(`   💥 User ${penalizedUser.telegramId} penalized ${penalty} XP (has lower XP: ${penalizedUser.weeklyXp + penalty} → ${penalizedUser.weeklyXp})`);
+      console.log(`   Final XP: ${user1.telegramId}=${user1.weeklyXp}, ${user2.telegramId}=${user2.weeklyXp}`);
+      
+      // Update completion records with penalty for whoever missed more
+      const userWhoMissedMore = user1Missed > user2Missed ? user1Id : user2Id;
+      await Completion.updateMany(
+        {
+          userId: userWhoMissedMore,
+          scheduledFor: { $gte: yesterday, $lt: today },
+          missedConfirmation: true,
+          xpPenalty: 0
+        },
+        { $set: { xpPenalty: 10 } }
+      );
+    } else {
+      console.log(`   ⚖️ Both users missed equal tasks, no penalty applied`);
+    }
+  } else {
+    // Single user or more than 2 users - apply standard penalties
+    for (const userId of userIds) {
+      const missedCount = missedTasksPerUser[userId];
+      if (missedCount > 0) {
+        const penalty = missedCount * 10;
+        const user = await User.findOne({ telegramId: userId });
+        if (user) {
+          user.weeklyXp = Math.max(0, user.weeklyXp - penalty);
+          await user.save();
+        }
+        
+        // Update completion records with penalty
+        await Completion.updateMany(
+          {
+            userId: userId,
+            scheduledFor: { $gte: yesterday, $lt: today },
+            missedConfirmation: true,
+            xpPenalty: 0
+          },
+          { $set: { xpPenalty: 10 } }
+        );
       }
     }
   }
@@ -202,6 +299,11 @@ async function checkMissedConfirmations() {
  * Check if a task was scheduled for yesterday
  */
 function isTaskScheduledForYesterday(task, yesterday) {
+  // Flexible tasks have no schedule, so they can't be "missed"
+  if (task.type === 'flexible') {
+    return false;
+  }
+  
   if (task.type === 'daily') {
     return true;
   }
