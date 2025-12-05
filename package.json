@@ -1,0 +1,36 @@
+{
+  "name": "telegram-task-tracker-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot and web dashboard for tracking productivity tasks with gamification",
+  "main": "app.js",
+  "scripts": {
+    "bot": "node bot/index.js",
+    "api": "node bot/api/server.js",
+    "start": "nodemon bot/index.js & nodemon bot/api/server.js & cd web && npm run dev",
+    "dev:bot": "nodemon bot/index.js",
+    "dev:api": "nodemon bot/api/server.js",
+    "dev:web": "cd web && npm run dev",
+    "build:web": "cd web && npm run build",
+    "start:web": "cd web && npm start",
+    "check": "./check-config.sh"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "productivity",
+    "task-tracker"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongoose": "^8.0.0",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
