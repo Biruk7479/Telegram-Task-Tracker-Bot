@@ -44,6 +44,16 @@ function isTaskScheduledForDate(task, targetDate) {
   return false;
 }
 
+// Get the start of the current week (Monday 00:00)
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
 async function fixPendingTasks() {
   try {
     // Connect to database
@@ -59,17 +69,45 @@ async function fixPendingTasks() {
     console.log(`\n🔍 Checking for tasks that should be marked incomplete...`);
     console.log(`Current local time: ${localNow.toLocaleString()}`);
     
-    // First, reset all users' XP to 100 to recalculate from scratch
+    // Get users and reset to 100, then reapply everything from scratch
     const users = await User.find();
     const initialXp = {};
     
+    console.log('\n📊 Storing initial XP before reset:');
     for (const user of users) {
       initialXp[user.telegramId] = user.weeklyXp;
+      console.log(`   User ${user.telegramId}: ${user.weeklyXp} XP`);
       user.weeklyXp = 100;
       await user.save();
     }
     
-    console.log('\n🔄 Reset all users to 100 XP to recalculate...\n');
+    // First, apply manual "No" penalties (not missed confirmations)
+    console.log('\n🔄 Step 1: Applying manual "No" penalties...');
+    const manualNoCompletions = await Completion.find({
+      completed: false,
+      missedConfirmation: false,
+      completedAt: { $gte: getWeekStart(localNow) }
+    });
+    
+    const manualPenaltiesByUser = {};
+    for (const user of users) {
+      manualPenaltiesByUser[user.telegramId] = 0;
+    }
+    
+    for (const completion of manualNoCompletions) {
+      manualPenaltiesByUser[completion.userId] = (manualPenaltiesByUser[completion.userId] || 0) + 10;
+    }
+    
+    for (const user of users) {
+      const penalty = manualPenaltiesByUser[user.telegramId];
+      if (penalty > 0) {
+        user.weeklyXp = Math.max(0, user.weeklyXp - penalty);
+        await user.save();
+        console.log(`   User ${user.telegramId}: -${penalty} XP from manual "No" clicks → ${user.weeklyXp} XP`);
+      }
+    }
+    
+    console.log('\n🔄 Step 2: Applying differential penalties for missed confirmations...\n');
     
     // Get all active tasks
     const tasks = await Task.find({ active: true });
@@ -217,8 +255,12 @@ async function fixPendingTasks() {
           penalizedUser.weeklyXp = Math.max(0, penalizedUser.weeklyXp - penalty);
           await penalizedUser.save();
           
+          // Reload both users to get fresh XP values
+          const updatedUser1 = await User.findOne({ telegramId: user1Id });
+          const updatedUser2 = await User.findOne({ telegramId: user2Id });
+          
           console.log(`   💥 User ${penalizedUser.telegramId} loses ${penalty} XP (has lower XP: ${beforeXp} → ${penalizedUser.weeklyXp})`);
-          console.log(`   Final XP: ${user1.telegramId}=${user1.weeklyXp}, ${user2.telegramId}=${user2.weeklyXp}`);
+          console.log(`   Final XP: ${user1Id}=${updatedUser1?.weeklyXp}, ${user2Id}=${updatedUser2?.weeklyXp}`);
           totalPenaltiesApplied += penalty;
           
           // Update completion records for whoever missed more

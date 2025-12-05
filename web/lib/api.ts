@@ -32,6 +32,7 @@ export interface Task {
   xpReward: number;
   active: boolean;
   createdBy: string;
+  assignedTo?: string[];
 }
 
 export interface Completion {
