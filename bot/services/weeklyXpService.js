@@ -19,10 +19,10 @@ async function checkAndResetWeek() {
 
   const localNow = getLocalTime();
   const isMonday = localNow.getDay() === 1; // 0 is Sunday, 1 is Monday
-  const isMidnight = localNow.getHours() === 0 && localNow.getMinutes() === 0;
+  const isSixAM = localNow.getHours() === 6 && localNow.getMinutes() === 0;
   
-  // Only reset on Mondays at midnight (00:00)
-  if (!isMonday || !isMidnight) return null;
+  // Only reset on Mondays at 6 AM
+  if (!isMonday || !isSixAM) return null;
   
   // Check if we already reset today (check first user)
   const user = users[0];
@@ -142,6 +142,10 @@ async function checkMissedConfirmations() {
   
   const today = new Date(localNow);
   today.setHours(0, 0, 0, 0);
+
+  // Allow confirmations until 6 AM the next day
+  const deadline = new Date(today);
+  deadline.setHours(6, 0, 0, 0);
   
   // Find completions from yesterday that were never confirmed
   const Task = require('../database/models').Task;
@@ -189,11 +193,11 @@ async function checkMissedConfirmations() {
         continue;
       }
 
-      // Check if user confirmed this task yesterday
+      // Check if user confirmed this task yesterday (or before 6 AM today)
       const completion = await Completion.findOne({
         taskId: task._id,
         userId: user.telegramId,
-        completedAt: { $gte: yesterday, $lt: today },
+        completedAt: { $gte: yesterday, $lt: deadline },
       });
       
       // If no completion record, count as missed
