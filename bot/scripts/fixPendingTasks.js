@@ -241,35 +241,31 @@ async function fixPendingTasks() {
         
         if (user1 && user2 && user1Missed !== user2Missed) {
           const diff = Math.abs(user1Missed - user2Missed);
-          const penalty = diff * 10;
           
-          // Apply penalty to whoever has LOWER XP
-          let penalizedUser;
+          // Find who missed more and the lowest current XP
+          const userWhoMissedMore = user1Missed > user2Missed ? user1 : user2;
+          const lowestXp = Math.min(user1.weeklyXp, user2.weeklyXp);
           
-          if (user1.weeklyXp < user2.weeklyXp) {
-            penalizedUser = user1;
-          } else if (user2.weeklyXp < user1.weeklyXp) {
-            penalizedUser = user2;
-          } else {
-            // Equal XP - penalize whoever missed more
-            penalizedUser = user1Missed > user2Missed ? user1 : user2;
-          }
+          // New XP for person who missed more = lowestXp - (diff × 10)
+          const newXp = Math.max(0, lowestXp - (diff * 10));
+          const penalty = userWhoMissedMore.weeklyXp - newXp;
           
-          const beforeXp = penalizedUser.weeklyXp;
-          penalizedUser.weeklyXp = Math.max(0, penalizedUser.weeklyXp - penalty);
-          await penalizedUser.save();
+          const beforeXp = userWhoMissedMore.weeklyXp;
+          userWhoMissedMore.weeklyXp = newXp;
+          await userWhoMissedMore.save();
           
           // Reload both users to get fresh XP values
           const updatedUser1 = await User.findOne({ telegramId: user1Id });
           const updatedUser2 = await User.findOne({ telegramId: user2Id });
           
-          console.log(`   💥 User ${penalizedUser.telegramId} loses ${penalty} XP (has lower XP: ${beforeXp} → ${penalizedUser.weeklyXp})`);
+          console.log(`   💥 User ${userWhoMissedMore.telegramId} loses ${penalty} XP (missed more: ${beforeXp} → ${newXp})`);
+          console.log(`   Calculation: lowest XP (${lowestXp}) - (${diff} × 10) = ${newXp}`);
           console.log(`   Final XP: ${user1Id}=${updatedUser1?.weeklyXp}, ${user2Id}=${updatedUser2?.weeklyXp}`);
           totalPenaltiesApplied += penalty;
           
           // Update completion records for whoever missed more
           const pastDate = new Date(dateKey);
-          const userWhoMissedMore = user1Missed > user2Missed ? user1Id : user2Id;
+          // const userWhoMissedMore = user1Missed > user2Missed ? user1Id : user2Id;
           await Completion.updateMany(
             {
               userId: userWhoMissedMore,

@@ -136,6 +136,9 @@ async function applyMissedConfirmationPenalty(userId, taskId, usersSnapshot = nu
  */
 async function checkMissedConfirmations() {
   const localNow = getLocalTime();
+  
+  // Calculate the date range we're checking for missed tasks
+  // We check tasks scheduled for "yesterday" (the day before today at 6 AM)
   const yesterday = new Date(localNow);
   yesterday.setDate(yesterday.getDate() - 1);
   yesterday.setHours(0, 0, 0, 0);
@@ -143,7 +146,8 @@ async function checkMissedConfirmations() {
   const today = new Date(localNow);
   today.setHours(0, 0, 0, 0);
 
-  // Allow confirmations until 6 AM the next day
+  // Tasks can be confirmed until 6 AM of the next day
+  // So we check for completions from yesterday 00:00 to today 06:00
   const deadline = new Date(today);
   deadline.setHours(6, 0, 0, 0);
   

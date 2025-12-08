@@ -1180,7 +1180,7 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
-// Check for missed confirmations once per day at midnight (Ethiopia time)
+// Check for missed confirmations once per day at 6 AM (Ethiopia time)
 cron.schedule('* * * * *', async () => {
   try {
     // Get Ethiopia time (UTC+3)
@@ -1189,9 +1189,9 @@ cron.schedule('* * * * *', async () => {
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const localNow = new Date(utc + (3600000 * offset));
     
-    // Only run at midnight Ethiopia time (00:00)
-    if (localNow.getHours() === 0 && localNow.getMinutes() === 0) {
-      console.log('🔍 Checking for missed confirmations (midnight Ethiopia time)...');
+    // Only run at 6 AM Ethiopia time (06:00)
+    if (localNow.getHours() === 6 && localNow.getMinutes() === 0) {
+      console.log('🔍 Checking for missed confirmations (6 AM Ethiopia time)...');
       await checkMissedConfirmations();
     }
   } catch (error) {
@@ -1199,7 +1199,7 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
-// Check for week reset every minute (checks for Monday 00:00 Ethiopia time)
+// Check for week reset every minute (checks for Monday 06:00 Ethiopia time)
 cron.schedule('* * * * *', async () => {
   try {
     const result = await checkAndResetWeek();
