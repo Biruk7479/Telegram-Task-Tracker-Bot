@@ -91,6 +91,19 @@ const recordCompletion = async (taskId, userId, completed, advanceCompletion = f
     // No level up for completions anymore - levels only increase from weekly wins
     await user.save();
     
+    // Calculate proper scheduledFor date
+    let scheduledForDate = new Date();
+    scheduledForDate.setHours(0, 0, 0, 0);
+    
+    // For flexible tasks, use today; for scheduled tasks, use their scheduled date
+    if (task.type !== 'flexible' && task.schedule) {
+      if (task.type === 'one-time' && task.schedule.date) {
+        scheduledForDate = new Date(task.schedule.date);
+        scheduledForDate.setHours(0, 0, 0, 0);
+      }
+      // For daily/weekly/custom, use today since they're completing on schedule
+    }
+    
     // Record completion
     const completion = new Completion({
       taskId,
@@ -98,7 +111,7 @@ const recordCompletion = async (taskId, userId, completed, advanceCompletion = f
       completed: true,
       xpEarned: 0, // No XP for completing tasks
       streakCount,
-      scheduledFor: new Date(),
+      scheduledFor: scheduledForDate,
       advanceCompletion: advanceCompletion,
     });
     await completion.save();
@@ -110,6 +123,17 @@ const recordCompletion = async (taskId, userId, completed, advanceCompletion = f
     user.weeklyXp = Math.max(0, (user.weeklyXp || 100) - 10); // Subtract 10 XP, minimum 0
     await user.save();
     
+    // Calculate proper scheduledFor date
+    let scheduledForDate = new Date();
+    scheduledForDate.setHours(0, 0, 0, 0);
+    
+    if (task.type !== 'flexible' && task.schedule) {
+      if (task.type === 'one-time' && task.schedule.date) {
+        scheduledForDate = new Date(task.schedule.date);
+        scheduledForDate.setHours(0, 0, 0, 0);
+      }
+    }
+    
     // Record non-completion
     const completion = new Completion({
       taskId,
@@ -118,7 +142,7 @@ const recordCompletion = async (taskId, userId, completed, advanceCompletion = f
       xpEarned: 0,
       xpPenalty: 10,
       streakCount: 0,
-      scheduledFor: new Date(),
+      scheduledFor: scheduledForDate,
     });
     await completion.save();
     

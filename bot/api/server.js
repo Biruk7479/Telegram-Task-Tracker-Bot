@@ -98,9 +98,13 @@ router.get('/api/calendar/:telegramId', async (req, res) => {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
     
+    // Query by scheduledFor (primary) OR completedAt (fallback for old data or flexible tasks)
     const completions = await Completion.find({
       userId: telegramId,
-      completedAt: { $gte: startDate, $lte: endDate },
+      $or: [
+        { scheduledFor: { $gte: startDate, $lte: endDate } },
+        { completedAt: { $gte: startDate, $lte: endDate }, scheduledFor: { $exists: false } }
+      ]
     }).populate('taskId');
     
     // Get all active scheduled tasks assigned to this user
@@ -159,11 +163,16 @@ router.get('/api/calendar/:telegramId', async (req, res) => {
         }
         
         if (shouldShow) {
-          // Check if this task was completed on this day (using scheduledFor, not completedAt)
-          const dayCompletion = completions.find(c => 
-            c.taskId && c.taskId._id.toString() === task._id.toString() &&
-            c.scheduledFor && c.scheduledFor.toISOString().split('T')[0] === date
-          );
+          // Check if this task was completed on this day (using scheduledFor, fallback to completedAt)
+          const dayCompletion = completions.find(c => {
+            if (!c.taskId || c.taskId._id.toString() !== task._id.toString()) return false;
+            
+            const completionDate = c.scheduledFor 
+              ? c.scheduledFor.toISOString().split('T')[0]
+              : c.completedAt.toISOString().split('T')[0];
+            
+            return completionDate === date;
+          });
           
           calendarData[date].scheduledTasks.push({
             _id: task._id.toString(),

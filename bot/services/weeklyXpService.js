@@ -101,9 +101,10 @@ async function handleWeekEnd(user) {
  * Fixed penalty of 10 XP for everyone
  * @param {string} userId - The user ID to penalize
  * @param {string} taskId - The task ID
+ * @param {Date} scheduledFor - The date the task was scheduled for
  * @param {Array} usersSnapshot - Optional snapshot of users for simultaneous calculation
  */
-async function applyMissedConfirmationPenalty(userId, taskId, usersSnapshot = null) {
+async function applyMissedConfirmationPenalty(userId, taskId, scheduledFor = null, usersSnapshot = null) {
   // Fetch user to update
   const userToUpdate = await User.findOne({ telegramId: userId });
   if (!userToUpdate) return;
@@ -123,6 +124,7 @@ async function applyMissedConfirmationPenalty(userId, taskId, usersSnapshot = nu
     xpPenalty: penalty,
     missedConfirmation: true,
     completedAt: new Date(),
+    scheduledFor: scheduledFor || new Date(),
   });
   
   return {
