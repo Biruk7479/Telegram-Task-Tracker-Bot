@@ -137,19 +137,22 @@ async function applyMissedConfirmationPenalty(userId, taskId, usersSnapshot = nu
 async function checkMissedConfirmations() {
   const localNow = getLocalTime();
   
-  // Calculate the date range we're checking for missed tasks
-  // We check tasks scheduled for "yesterday" (the day before today at 6 AM)
-  const yesterday = new Date(localNow);
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
+  console.log(`🔍 Running missed confirmations check at: ${localNow.toISOString()}`);
   
-  const today = new Date(localNow);
-  today.setHours(0, 0, 0, 0);
-
-  // Tasks can be confirmed until 6 AM of the next day
-  // So we check for completions from yesterday 00:00 to today 06:00
-  const deadline = new Date(today);
-  deadline.setHours(6, 0, 0, 0);
+  // When this runs at 6 AM on day X, we're checking tasks scheduled for day X-1
+  // Example: Runs at 6 AM Dec 9 → Check Dec 8 tasks
+  
+  // Get the day we're checking (the day that just ended at 6 AM)
+  const dayBeingChecked = new Date(localNow);
+  dayBeingChecked.setDate(dayBeingChecked.getDate() - 1);
+  dayBeingChecked.setHours(0, 0, 0, 0);
+  
+  // The deadline for those tasks was 6 AM this morning
+  const completionDeadline = new Date(localNow);
+  completionDeadline.setHours(6, 0, 0, 0);
+  
+  console.log(`📅 Checking tasks scheduled for: ${dayBeingChecked.toDateString()}`);
+  console.log(`⏰ Deadline was: ${completionDeadline.toISOString()}`);
   
   // Find completions from yesterday that were never confirmed
   const Task = require('../database/models').Task;
@@ -166,26 +169,27 @@ async function checkMissedConfirmations() {
   }
   
   for (const task of tasks) {
-    // Check if task was scheduled for yesterday based on task type
-    const wasScheduledYesterday = isTaskScheduledForYesterday(task, yesterday);
+    // Check if task was scheduled for the day being checked
+    const wasScheduledForDay = isTaskScheduledForYesterday(task, dayBeingChecked);
     
-    if (!wasScheduledYesterday) {
-      continue; // Skip if task was not scheduled for yesterday
+    if (!wasScheduledForDay) {
+      continue; // Skip if task was not scheduled for that day
     }
     
     // Check creation time to avoid penalizing tasks created after deadline
     if (task.schedule && task.schedule.time) {
       const time = parseTime(task.schedule.time);
       if (time) {
-        const taskDeadline = new Date(yesterday);
-        taskDeadline.setHours(parseInt(time.hour), parseInt(time.minute), 0, 0);
+        const taskScheduledTime = new Date(dayBeingChecked);
+        taskScheduledTime.setHours(parseInt(time.hour), parseInt(time.minute), 0, 0);
         
         // Convert task.createdAt to local time
         const offset = config.timezone?.offset || 0;
         const taskCreatedAtLocal = new Date(task.createdAt.getTime() + (3600000 * offset));
         
-        // If task was created after the deadline, skip
-        if (taskCreatedAtLocal > taskDeadline) {
+        // If task was created after its scheduled time on that day, skip
+        if (taskCreatedAtLocal > taskScheduledTime) {
+          console.log(`   ⏭️ Skipping task "${task.name}" - created after scheduled time`);
           continue;
         }
       }
@@ -197,15 +201,17 @@ async function checkMissedConfirmations() {
         continue;
       }
 
-      // Check if user confirmed this task yesterday (or before 6 AM today)
+      // Check if user confirmed this task between the scheduled day and the 6 AM deadline
+      // Example: Dec 8 task can be completed from Dec 8 00:00 to Dec 9 06:00
       const completion = await Completion.findOne({
         taskId: task._id,
         userId: user.telegramId,
-        completedAt: { $gte: yesterday, $lt: deadline },
+        completedAt: { $gte: dayBeingChecked, $lt: completionDeadline },
       });
       
       // If no completion record, count as missed
       if (!completion) {
+        console.log(`   ❌ User ${user.telegramId} missed task: ${task.name}`);
         missedTasksPerUser[user.telegramId]++;
         
         // Create missed completion record
@@ -216,7 +222,7 @@ async function checkMissedConfirmations() {
           xpPenalty: 0, // Will be calculated after comparing all users
           missedConfirmation: true,
           completedAt: new Date(),
-          scheduledFor: yesterday,
+          scheduledFor: dayBeingChecked,
         });
       }
     }
@@ -269,7 +275,7 @@ async function checkMissedConfirmations() {
       await Completion.updateMany(
         {
           userId: penalizedUser.telegramId,
-          scheduledFor: { $gte: yesterday, $lt: today },
+          scheduledFor: dayBeingChecked,
           missedConfirmation: true,
           xpPenalty: 0
         },
@@ -294,7 +300,7 @@ async function checkMissedConfirmations() {
         await Completion.updateMany(
           {
             userId: userId,
-            scheduledFor: { $gte: yesterday, $lt: today },
+            scheduledFor: dayBeingChecked,
             missedConfirmation: true,
             xpPenalty: 0
           },

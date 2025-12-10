@@ -159,10 +159,10 @@ router.get('/api/calendar/:telegramId', async (req, res) => {
         }
         
         if (shouldShow) {
-          // Check if this task was completed on this day
+          // Check if this task was completed on this day (using scheduledFor, not completedAt)
           const dayCompletion = completions.find(c => 
             c.taskId && c.taskId._id.toString() === task._id.toString() &&
-            c.completedAt.toISOString().split('T')[0] === date
+            c.scheduledFor && c.scheduledFor.toISOString().split('T')[0] === date
           );
           
           calendarData[date].scheduledTasks.push({
@@ -178,7 +178,11 @@ router.get('/api/calendar/:telegramId', async (req, res) => {
     }
     
     completions.forEach(completion => {
-      const date = completion.completedAt.toISOString().split('T')[0];
+      // Use scheduledFor to determine which calendar day to show the completion
+      // This ensures tasks completed after midnight still show on the correct scheduled day
+      const date = completion.scheduledFor 
+        ? completion.scheduledFor.toISOString().split('T')[0]
+        : completion.completedAt.toISOString().split('T')[0]; // fallback for old data
       
       if (!calendarData[date]) {
         calendarData[date] = {
