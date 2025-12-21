@@ -50,6 +50,7 @@ I'll help you and your partner stay productive and accountable!
 
 *Available Commands:*
 /addtask - Create a new task
+/bulkadd - Add multiple tasks at once
 /edittask - Edit an existing task
 /listtasks - View all active tasks
 /deletetask - Remove a task
@@ -88,6 +89,7 @@ bot.onText(/\/help/, (msg) => {
 
 *Creating Tasks*
 Use /addtask and follow the prompts to create daily, weekly, or flexible tasks.
+Use /bulkadd to add multiple tasks at once using a simple format.
 
 *Task Types*
 • *Daily* - Repeats every day at a specific time
@@ -105,6 +107,7 @@ When it's time to complete a task, I'll ask both of you if you completed it. Rep
 
 *Other Commands*
 • /addtask - Create a new task
+• /bulkadd - Add multiple tasks at once
 • /edittask - Edit an existing task (name, time, schedule, description, date)
 • /markdone - Mark a task as completed in advance (no confirmation needed)
 • /listtasks - View all active tasks
@@ -190,6 +193,48 @@ bot.onText(/\/addtask/, (msg) => {
   conversationStates[userId] = { step: 'task_name' };
   
   bot.sendMessage(chatId, '📝 What should we call this task?\n\nExample: "Morning Prayer", "Workout", "Read for 30 mins"');
+});
+
+// Command: /bulkadd
+bot.onText(/\/bulkadd/, (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+  
+  const instructionMessage = `📋 *Bulk Add Tasks*
+
+Send tasks in this format (one per line):
+
+\`\`\`
+Name | Description | Type | Time | Days | AssignedTo
+\`\`\`
+
+*Format Guide:*
+• *Name*: Task name (required)
+• *Description*: Task details (use "skip" if none)
+• *Type*: daily, weekly, custom, one-time, flexible
+• *Time*: HH:MM format (e.g., 7:00, 14:30) - skip for flexible
+• *Days*: For weekly/custom: Mon,Wed,Fri or M,W,F - For one-time: YYYY-MM-DD - skip for daily/flexible
+• *AssignedTo*: me, partner, both
+
+*Examples:*
+
+\`Morning Prayer | Start the day right | daily | 7:00 | skip | both\`
+
+\`Gym | Workout session | weekly | 18:00 | Mon,Wed,Fri | me\`
+
+\`Study Python | Learn for 1 hour | custom | 20:00 | M,W,F | both\`
+
+\`Doctor Appointment | Annual checkup | one-time | 10:00 | 2025-12-25 | me\`
+
+\`Read Book | Flexible reading time | flexible | skip | skip | partner\`
+
+━━━━━━━━━━━━━━━━
+
+Send multiple tasks (one per line), or type /stop to cancel.`;
+
+  conversationStates[userId] = { step: 'bulk_add_tasks' };
+  
+  bot.sendMessage(chatId, instructionMessage, { parse_mode: 'Markdown' });
 });
 
 // Command: /listtasks
@@ -430,6 +475,134 @@ bot.on('message', async (msg) => {
   
   try {
     switch (state.step) {
+      case 'bulk_add_tasks':
+        // Parse bulk task input
+        const lines = text.trim().split('\n').filter(line => line.trim());
+        const results = { success: [], failed: [] };
+        
+        for (const line of lines) {
+          try {
+            const parts = line.split('|').map(p => p.trim());
+            
+            if (parts.length < 6) {
+              results.failed.push({ line, reason: 'Invalid format - needs 6 parts separated by |' });
+              continue;
+            }
+            
+            const [name, description, type, time, days, assignedTo] = parts;
+            
+            // Validate task type
+            const validTypes = ['daily', 'weekly', 'custom', 'one-time', 'flexible'];
+            if (!validTypes.includes(type.toLowerCase())) {
+              results.failed.push({ line, reason: `Invalid type "${type}" - must be: daily, weekly, custom, one-time, or flexible` });
+              continue;
+            }
+            
+            // Parse assigned to
+            let assignedToIds = [];
+            const assignedToLower = assignedTo.toLowerCase();
+            if (assignedToLower === 'me') {
+              assignedToIds = [userId];
+            } else if (assignedToLower === 'partner') {
+              assignedToIds = [userId === config.users.user1.id ? config.users.user2.id : config.users.user1.id];
+            } else if (assignedToLower === 'both') {
+              assignedToIds = [config.users.user1.id, config.users.user2.id];
+            } else {
+              results.failed.push({ line, reason: `Invalid assignedTo "${assignedTo}" - must be: me, partner, or both` });
+              continue;
+            }
+            
+            // Build schedule object
+            const schedule = {};
+            const taskType = type.toLowerCase();
+            
+            // Parse time if not skip
+            if (time.toLowerCase() !== 'skip' && taskType !== 'flexible') {
+              const parsedTime = parseTime(time);
+              if (!parsedTime) {
+                results.failed.push({ line, reason: `Invalid time format "${time}" - use HH:MM (e.g., 7:00)` });
+                continue;
+              }
+              schedule.time = parsedTime.formatted;
+            }
+            
+            // Parse days/date based on task type
+            if (taskType === 'weekly' || taskType === 'custom') {
+              if (days.toLowerCase() !== 'skip') {
+                const parsedDays = parseDays(days) || parseCustomDays(days);
+                if (!parsedDays) {
+                  results.failed.push({ line, reason: `Invalid days format "${days}" - use Mon,Wed,Fri or M,W,F` });
+                  continue;
+                }
+                schedule.days = parsedDays;
+              } else {
+                results.failed.push({ line, reason: `${taskType} tasks require days - cannot skip` });
+                continue;
+              }
+            } else if (taskType === 'one-time') {
+              if (days.toLowerCase() !== 'skip') {
+                const dateMatch = days.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (!dateMatch) {
+                  results.failed.push({ line, reason: `Invalid date format "${days}" - use YYYY-MM-DD` });
+                  continue;
+                }
+                const [year, month, day] = days.split('-').map(Number);
+                const taskDate = new Date(year, month - 1, day);
+                taskDate.setHours(12, 0, 0, 0);
+                if (isNaN(taskDate.getTime())) {
+                  results.failed.push({ line, reason: `Invalid date "${days}"` });
+                  continue;
+                }
+                schedule.date = taskDate;
+              } else {
+                results.failed.push({ line, reason: 'One-time tasks require a date - cannot skip' });
+                continue;
+              }
+            }
+            
+            // Create the task
+            const task = await createTask(
+              name,
+              description.toLowerCase() === 'skip' ? '' : description,
+              taskType,
+              schedule,
+              userId,
+              10,
+              assignedToIds
+            );
+            
+            results.success.push(task.name);
+          } catch (error) {
+            results.failed.push({ line, reason: error.message });
+          }
+        }
+        
+        // Send results
+        let resultMessage = '📊 *Bulk Add Results*\n━━━━━━━━━━━━━━━━\n\n';
+        
+        if (results.success.length > 0) {
+          resultMessage += `✅ *Successfully Created (${results.success.length}):*\n`;
+          results.success.forEach(name => {
+            resultMessage += `• ${name}\n`;
+          });
+          resultMessage += '\n';
+        }
+        
+        if (results.failed.length > 0) {
+          resultMessage += `❌ *Failed (${results.failed.length}):*\n`;
+          results.failed.forEach(({ line, reason }) => {
+            resultMessage += `• ${reason}\n  _${line.substring(0, 50)}${line.length > 50 ? '...' : ''}_\n`;
+          });
+        }
+        
+        if (results.success.length === 0 && results.failed.length === 0) {
+          resultMessage += '⚠️ No valid tasks found. Please check the format and try again.';
+        }
+        
+        bot.sendMessage(chatId, resultMessage, { parse_mode: 'Markdown' });
+        delete conversationStates[userId];
+        break;
+        
       case 'task_name':
         state.taskData = { name: text };
         state.step = 'task_description';
