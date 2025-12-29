@@ -256,6 +256,289 @@ router.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ==================== TASK CRUD OPERATIONS ====================
+
+// Create a new task
+router.post('/api/tasks', async (req, res) => {
+  try {
+    const { name, description, type, schedule, createdBy, assignedTo, xpReward } = req.body;
+    
+    // Validation
+    if (!name || !type || !createdBy) {
+      return res.status(400).json({ error: 'Missing required fields: name, type, createdBy' });
+    }
+    
+    const validTypes = ['daily', 'weekly', 'custom', 'one-time', 'flexible'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid task type' });
+    }
+    
+    const task = new Task({
+      name,
+      description: description || '',
+      type,
+      schedule: schedule || {},
+      xpReward: xpReward || 10,
+      createdBy,
+      assignedTo: assignedTo || [createdBy],
+      active: true,
+    });
+    
+    await task.save();
+    
+    // Sync to Google Calendar
+    try {
+      const { createCalendarEvent } = require('../services/googleCalendarService');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const eventId = await createCalendarEvent(task, today);
+      if (eventId) {
+        task.googleCalendarEventId = eventId;
+        await task.save();
+      }
+    } catch (calendarError) {
+      console.error('Failed to create calendar event:', calendarError);
+      // Don't fail the task creation if calendar sync fails
+    }
+    
+    res.status(201).json(task);
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: 'Failed to create task' });
+  }
+});
+
+// Update an existing task
+router.put('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { name, description, schedule, assignedTo } = req.body;
+    
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Update fields
+    if (name) task.name = name;
+    if (description !== undefined) task.description = description;
+    if (schedule) {
+      task.schedule = { ...task.schedule, ...schedule };
+      task.markModified('schedule');
+    }
+    if (assignedTo) task.assignedTo = assignedTo;
+    
+    await task.save();
+    
+    // Update Google Calendar event
+    try {
+      const { updateCalendarEvent } = require('../services/googleCalendarService');
+      if (task.googleCalendarEventId) {
+        const userId = task.assignedTo?.includes(require('../config').users.user1.id) 
+          ? require('../config').users.user1.id 
+          : task.createdBy;
+        
+        await updateCalendarEvent(task.googleCalendarEventId, userId, {
+          summary: task.name,
+          description: task.description,
+        });
+      }
+    } catch (calendarError) {
+      console.error('Failed to update calendar event:', calendarError);
+    }
+    
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+// Delete a task (soft delete)
+router.delete('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    task.active = false;
+    await task.save();
+    
+    // Delete from Google Calendar
+    try {
+      const { deleteCalendarEvent } = require('../services/googleCalendarService');
+      if (task.googleCalendarEventId) {
+        const userId = task.assignedTo?.includes(require('../config').users.user1.id) 
+          ? require('../config').users.user1.id 
+          : task.createdBy;
+        
+        await deleteCalendarEvent(task.googleCalendarEventId, userId);
+      }
+    } catch (calendarError) {
+      console.error('Failed to delete calendar event:', calendarError);
+    }
+    
+    res.json({ success: true, message: 'Task deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
+// Mark task as complete/incomplete
+router.post('/api/tasks/:taskId/complete', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { userId, completed, scheduledFor } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+    
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Check if user is assigned to this task
+    if (task.assignedTo && task.assignedTo.length > 0 && !task.assignedTo.includes(userId)) {
+      return res.status(403).json({ error: 'User not assigned to this task' });
+    }
+    
+    // Calculate proper scheduledFor date
+    let scheduledForDate = scheduledFor ? new Date(scheduledFor) : new Date();
+    scheduledForDate.setHours(0, 0, 0, 0);
+    
+    // Check if completion already exists for this task/user/date
+    const existingCompletion = await Completion.findOne({
+      taskId: task._id,
+      userId: userId,
+      scheduledFor: scheduledForDate,
+    });
+    
+    if (existingCompletion) {
+      // Update existing completion
+      existingCompletion.completed = completed;
+      existingCompletion.completedAt = new Date();
+      await existingCompletion.save();
+      
+      // Update Google Calendar event
+      try {
+        const { markEventCompleted, markEventMissed } = require('../services/googleCalendarService');
+        if (task.googleCalendarEventId) {
+          if (completed) {
+            await markEventCompleted(task.googleCalendarEventId, userId, task.name);
+          } else {
+            await markEventMissed(task.googleCalendarEventId, userId, task.name);
+          }
+        }
+      } catch (calendarError) {
+        console.error('Failed to update calendar event status:', calendarError);
+      }
+      
+      return res.json(existingCompletion);
+    }
+    
+    // Create new completion
+    const { recordCompletion } = require('../services/userService');
+    const { getOrCreateUser } = require('../services/userService');
+    const User = require('../database/models').User;
+    const user = await User.findOne({ telegramId: userId });
+    const username = user?.username || 'User';
+    
+    await getOrCreateUser(userId, username);
+    const result = await recordCompletion(taskId, userId, completed, false);
+    
+    // Update Google Calendar event
+    try {
+      const { markEventCompleted, markEventMissed } = require('../services/googleCalendarService');
+      if (task.googleCalendarEventId) {
+        if (completed) {
+          await markEventCompleted(task.googleCalendarEventId, userId, task.name);
+        } else {
+          await markEventMissed(task.googleCalendarEventId, userId, task.name);
+        }
+      }
+    } catch (calendarError) {
+      console.error('Failed to update calendar event status:', calendarError);
+    }
+    
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Error marking task complete:', error);
+    res.status(500).json({ error: 'Failed to mark task complete' });
+  }
+});
+
+// Get task by ID
+router.get('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const task = await Task.findById(taskId);
+    
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    res.json(task);
+  } catch (error) {
+    console.error('Error fetching task:', error);
+    res.status(500).json({ error: 'Failed to fetch task' });
+  }
+});
+
+// ==================== GOOGLE CALENDAR OAUTH ====================
+
+// Google Calendar OAuth - Get authorization URL
+router.get('/api/auth/google/url', (req, res) => {
+  try {
+    const { getAuthUrl } = require('../services/googleCalendarService');
+    const authUrl = getAuthUrl();
+    res.json({ authUrl });
+  } catch (error) {
+    console.error('Error generating auth URL:', error);
+    res.status(500).json({ error: 'Failed to generate authorization URL' });
+  }
+});
+
+// Google Calendar OAuth - Callback
+router.get('/api/auth/google/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    
+    if (!code) {
+      return res.status(400).send('No authorization code provided');
+    }
+    
+    const { getTokensFromCode } = require('../services/googleCalendarService');
+    const tokens = await getTokensFromCode(code);
+    
+    // Display the refresh token for user to add to .env
+    res.send(`
+      <html>
+        <head><title>Google Calendar Authorization</title></head>
+        <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+          <h1>✅ Authorization Successful!</h1>
+          <p>Copy this refresh token and add it to your <code>.env</code> file:</p>
+          <pre style="background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto;">
+USER1_GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}
+# or
+USER2_GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}
+          </pre>
+          <p><strong>Important:</strong> Keep this token secure and don't share it publicly!</p>
+          <p>After adding the token to your <code>.env</code> file, restart the bot.</p>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Error exchanging code for tokens:', error);
+    res.status(500).send('Failed to authorize. Please try again.');
+  }
+});
+
 // Mount router with BASE_PATH
 if (BASE_PATH) {
   console.log(`Mounting routes at BASE_PATH: ${BASE_PATH}`);

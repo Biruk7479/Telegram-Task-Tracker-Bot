@@ -18,6 +18,14 @@ module.exports = {
   mongodb: {
     uri: process.env.MONGODB_URI,
   },
+  googleCalendar: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/auth/google/callback',
+    calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+    user1RefreshToken: process.env.USER1_GOOGLE_REFRESH_TOKEN,
+    user2RefreshToken: process.env.USER2_GOOGLE_REFRESH_TOKEN,
+  },
   api: {
     port: process.env.PORT || process.env.API_PORT || 3001,
     secret: process.env.API_SECRET,

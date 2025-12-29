@@ -23,6 +23,23 @@ const createTask = async (name, description, type, schedule, createdBy, xpReward
   });
   
   await task.save();
+  
+  // Sync to Google Calendar
+  try {
+    const { createCalendarEvent } = require('./googleCalendarService');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventId = await createCalendarEvent(task, today);
+    if (eventId) {
+      task.googleCalendarEventId = eventId;
+      await task.save();
+      console.log(`✅ Task "${task.name}" synced to Google Calendar`);
+    }
+  } catch (error) {
+    console.error('⚠️ Failed to sync task to Google Calendar:', error.message);
+    // Don't fail task creation if calendar sync fails
+  }
+  
   return task;
 };
 

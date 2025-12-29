@@ -32,6 +32,7 @@ const taskSchema = new mongoose.Schema({
   active: { type: Boolean, default: true },
   createdBy: { type: String, required: true }, // telegram user id
   assignedTo: [{ type: String }], // array of telegram user ids who should do this task
+  googleCalendarEventId: { type: String }, // Google Calendar event ID for syncing
   createdAt: { type: Date, default: Date.now },
 });
 
