@@ -88,6 +88,12 @@ export default function Home() {
               >
                 Rules
               </a>
+              <a
+                href="/manage"
+                className="px-5 py-2 rounded-md text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition shadow-sm"
+              >
+                Manage
+              </a>
             </div>
           </div>
         </div>

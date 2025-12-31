@@ -5,6 +5,7 @@ import { apiService, Task } from '@/lib/api';
 import TaskManager from '@/components/TaskManager';
 import TaskCompletionButton from '@/components/TaskCompletionButton';
 import GoogleCalendarAuth from '@/components/GoogleCalendarAuth';
+import Link from 'next/link';
 
 const ZEN_ID = '5780476905';
 const LILY_ID = '1362950195';
@@ -17,6 +18,7 @@ export default function ManageTasksPage() {
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<'zen' | 'lily'>('zen');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   // Check if already authenticated
   useEffect(() => {
@@ -25,7 +27,24 @@ export default function ManageTasksPage() {
       setIsAuthenticated(true);
       fetchTasks();
     }
+
+    // Check for saved dark mode preference
+    const savedMode = localStorage.getItem('darkMode');
+    if (savedMode) {
+      setDarkMode(savedMode === 'true');
+    }
   }, []);
+
+  useEffect(() => {
+    // Update document class
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [darkMode]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,35 +67,18 @@ export default function ManageTasksPage() {
     setIsAuthenticated(false);
     sessionStorage.removeItem('taskTrackerAuth');
     setPassword('');
-  };
-
-  const fetchTasks = async () => {
-    setLoading(true);
-    try {
-      const data = await apiService.getTasks();
-      setTasks(data);
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getCurrentUserId = () => currentUser === 'zen' ? ZEN_ID : LILY_ID;
-  const getPartnerUserId = () => currentUser === 'zen' ? LILY_ID : ZEN_ID;
-
   // Login page
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm p-8 w-full max-w-md">
           <div className="text-center mb-8">
             <div className="text-6xl mb-4">🔐</div>
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-              Task Tracker
+            <h1 className="text-2xl font-light tracking-tight text-gray-900 dark:text-white mb-2">
+              Task Manager
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Zen & Lily's Private Dashboard
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Private Dashboard Access
             </p>
           </div>
 
@@ -90,7 +92,7 @@ export default function ManageTasksPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter access password"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className="w-full px-4 py-3 border border-gray-200 dark:border-gray-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-950 dark:text-white text-sm"
                 autoFocus
               />
             </div>
@@ -99,6 +101,28 @@ export default function ManageTasksPage() {
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-600 dark:text-red-400">
                 {error}
               </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors text-sm"
+            >
+              Access Dashboard
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <Link 
+              href="/"
+              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
+            >
+              ← Back to Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }           </div>
             )}
 
             <button
@@ -119,84 +143,103 @@ export default function ManageTasksPage() {
 
   // Main dashboard
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 bg-white/95 dark:bg-gray-950/95 backdrop-blur-sm">
+        <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-                📋 Task Manager
+            <div>
+              <h1 className="text-2xl font-light tracking-tight text-gray-900 dark:text-white">
+                Task Manager
               </h1>
-              
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+                Create, edit, and manage tasks
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-4">
               {/* User Switcher */}
-              <div className="flex gap-2">
+              <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
                 <button
                   onClick={() => setCurrentUser('zen')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-5 py-2 rounded-md text-sm font-medium transition ${
                     currentUser === 'zen'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
-                  👤 Zen
+                  Zen
                 </button>
                 <button
                   onClick={() => setCurrentUser('lily')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-5 py-2 rounded-md text-sm font-medium transition ${
                     currentUser === 'lily'
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
-                  👥 Lily
+                  Lily
                 </button>
+              </div>
+
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition"
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8 max-w-[1600px]">
+        <div className="space-y-8">
+          {/* Google Calendar Authorization */}
+          <GoogleCalendarAuth />
+
+          {/* Stats Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Total Active Tasks</div>
+              <div className="text-3xl font-light text-gray-900 dark:text-white">
+                {tasks.length}
               </div>
             </div>
 
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
-            >
-              🚪 Logout
-            </button>
-          </div>
-        </div>
-      </header>
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Zen's Tasks</div>
+              <div className="text-3xl font-light text-gray-900 dark:text-white">
+                {tasks.filter(t => t.assignedTo?.includes(ZEN_ID) && !t.assignedTo?.includes(LILY_ID)).length}
+              </div>
+            </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Google Calendar Authorization */}
-        <GoogleCalendarAuth />
-
-        {/* Stats Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <div className="text-3xl mb-2">📊</div>
-            <div className="text-2xl font-bold text-gray-800 dark:text-white">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Lily's Tasks</div>
+              <div className="text-3xl font-light text-gray-900 dark:text-white">
+                {tasks.filter(t => t.assignedTo?.includes(LILY_ID) && !t.assignedTo?.includes(ZEN_ID)).length}
+              </div>
+            </div>
+          </div>iv className="text-2xl font-bold text-gray-800 dark:text-white">
               {tasks.length}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Total Active Tasks</div>
+          {/* Task Manager */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-light text-gray-900 dark:text-white mb-6">
+              Manage Tasks
+            </h2>
+            <TaskManager
+              tasks={tasks}
+              currentUserId={getCurrentUserId()}
+              partnerUserId={getPartnerUserId()}
+              onTaskCreated={fetchTasks}
+              onTaskUpdated={fetchTasks}
+              onTaskDeleted={fetchTasks}
+            />
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <div className="text-3xl mb-2">🔵</div>
-            <div className="text-2xl font-bold text-gray-800 dark:text-white">
-              {tasks.filter(t => t.assignedTo?.includes(ZEN_ID) && !t.assignedTo?.includes(LILY_ID)).length}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Zen's Tasks</div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <div className="text-3xl mb-2">🟢</div>
-            <div className="text-2xl font-bold text-gray-800 dark:text-white">
-              {tasks.filter(t => t.assignedTo?.includes(LILY_ID) && !t.assignedTo?.includes(ZEN_ID)).length}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Lily's Tasks</div>
-          </div>
-        </div>
-
-        {/* Task Manager */}
+          {/* Today's Tasks */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-light text-gray-900 dark:text-white mb-6">
+              Today's Tasks - Mark Complete
+            </h2>k Manager */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6">
             Manage Tasks
@@ -218,91 +261,101 @@ export default function ManageTasksPage() {
           </h2>
           <div className="space-y-4">
             {loading ? (
-              <div className="text-center py-8 text-gray-500">Loading tasks...</div>
-            ) : tasks.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No active tasks. Create your first task above!
-              </div>
-            ) : (
-              tasks
-                .filter(task => {
-                  // Show tasks assigned to current user
-                  const userId = getCurrentUserId();
-                  return task.assignedTo?.includes(userId);
-                })
-                .map((task) => {
-                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                  let scheduleInfo = '';
-                  
-                  if (task.type === 'daily' && task.schedule?.time) {
-                    scheduleInfo = ` • ${task.schedule.time}`;
-                  } else if (task.type === 'weekly' && task.schedule?.time && task.schedule?.days) {
-                    const days = task.schedule.days.map(d => dayNames[d]).join(', ');
-                    scheduleInfo = ` • ${days} at ${task.schedule.time}`;
-                  } else if (task.type === 'one-time' && task.schedule?.date) {
-                    scheduleInfo = ` • ${task.schedule.date}`;
-                  }
-
-                  // Determine color based on assignment
-                  let colorClass = 'border-red-200 dark:border-red-800';
-                  if (task.assignedTo?.length === 1) {
-                    if (task.assignedTo[0] === ZEN_ID) {
-                      colorClass = 'border-blue-200 dark:border-blue-800';
-                    } else {
-                      colorClass = 'border-green-200 dark:border-green-800';
+            <div className="space-y-3">
+              {loading ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading tasks...</div>
+              ) : tasks.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No active tasks. Create your first task above!
+                </div>
+              ) : (
+                tasks
+                  .filter(task => {
+                    // Show tasks assigned to current user
+                    const userId = getCurrentUserId();
+                    return task.assignedTo?.includes(userId);
+                  })
+                  .map((task) => {
+                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    let scheduleInfo = '';
+                    
+                    if (task.type === 'daily' && task.schedule?.time) {
+                      scheduleInfo = ` • ${task.schedule.time}`;
+                    } else if (task.type === 'weekly' && task.schedule?.time && task.schedule?.days) {
+                      const days = task.schedule.days.map(d => dayNames[d]).join(', ');
+                      scheduleInfo = ` • ${days} at ${task.schedule.time}`;
+                    } else if (task.type === 'one-time' && task.schedule?.date) {
+                      scheduleInfo = ` • ${task.schedule.date}`;
                     }
-                  }
 
-                  return (
-                    <div
-                      key={task._id}
-                      className={`border-l-4 ${colorClass} bg-gray-50 dark:bg-gray-700 p-4 rounded-lg flex items-center justify-between`}
-                    >
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg text-gray-800 dark:text-white">
-                          {task.name}
-                        </h3>
-                        {task.description && (
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            {task.description}
-                          </p>
-                        )}
-                        <div className="flex gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span>📋 {task.type}</span>
-                          {scheduleInfo && <span>{scheduleInfo}</span>}
+                    // Determine color based on assignment
+                    let colorClass = 'border-red-200 dark:border-red-800';
+                    if (task.assignedTo?.length === 1) {
+                      if (task.assignedTo[0] === ZEN_ID) {
+                        colorClass = 'border-blue-200 dark:border-blue-800';
+                      } else {
+                        colorClass = 'border-green-200 dark:border-green-800';
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={task._id}
+                        className={`border-l-4 ${colorClass} bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-lg flex items-center justify-between`}
+                      >
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900 dark:text-white">
+                            {task.name}
+                          </h3>
+                          {task.description && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {task.description}
+                            </p>
+                          )}
+                          <div className="flex gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{task.type}</span>
+                            {scheduleInfo && <span>{scheduleInfo}</span>}
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <TaskCompletionButton
+                            taskId={task._id}
+                            taskName={task.name}
+                            userId={getCurrentUserId()}
+                            scheduledFor={new Date().toISOString().split('T')[0]}
+                            onCompletionChanged={fetchTasks}
+                          />
                         </div>
                       </div>
-                      <div className="ml-4">
-                        <TaskCompletionButton
-                          taskId={task._id}
-                          taskName={task.name}
-                          userId={getCurrentUserId()}
-                          scheduledFor={new Date().toISOString().split('T')[0]}
-                          onCompletionChanged={fetchTasks}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-            )}
+                    );
+                  })
+              )}
+            </div>
+          {/* Instructions */}
+          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+            <h3 className="font-medium text-gray-900 dark:text-white mb-3">
+              Quick Tips
+            </h3>
+            <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+              <li>• Blue border = Zen's tasks only</li>
+              <li>• Green border = Lily's tasks only</li>
+              <li>• Red border = Tasks for both</li>
+              <li>• Click the user switcher (Zen/Lily) to change perspective</li>
+              <li>• Tasks automatically sync to Google Calendar with colors</li>
+              <li>• Use Telegram bot for quick access: /addtask, /markdone</li>
+            </ul>
           </div>
         </div>
-
-        {/* Instructions */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-            💡 Quick Tips
-          </h3>
-          <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-            <li>• 🔵 <strong>Blue border</strong> = Zen's tasks only</li>
-            <li>• 🟢 <strong>Green border</strong> = Lily's tasks only</li>
-            <li>• 🔴 <strong>Red border</strong> = Tasks for both</li>
-            <li>• Click the user switcher (Zen/Lily) to change perspective</li>
-            <li>• Tasks automatically sync to Google Calendar with colors</li>
-            <li>• Use Telegram bot for quick access: /addtask, /markdone</li>
-          </ul>
-        </div>
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-gray-800 mt-16 py-8">
+        <div className="container mx-auto px-6 text-center">
+          <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+            Made with ❤️ for Lily by Aj
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
