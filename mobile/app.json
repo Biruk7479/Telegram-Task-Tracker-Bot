@@ -32,7 +32,7 @@
           "widgets": [
             {
               "name": "Board",
-              "label": "Lizen · Everything",
+              "label": "Lizen \u00b7 Everything",
               "description": "Duel, both checklists, the week and savings in one widget",
               "minWidth": "250dp",
               "minHeight": "250dp",
@@ -43,7 +43,7 @@
             },
             {
               "name": "Duel",
-              "label": "Lizen · Duel",
+              "label": "Lizen \u00b7 Duel",
               "description": "Both weekly XP bars and the days left",
               "minWidth": "250dp",
               "minHeight": "40dp",
@@ -54,8 +54,8 @@
             },
             {
               "name": "Today",
-              "label": "Lizen · My today",
-              "description": "Your checklist — tap a task to mark it done",
+              "label": "Lizen \u00b7 My today",
+              "description": "Your checklist \u2014 tap a task to mark it done",
               "minWidth": "250dp",
               "minHeight": "110dp",
               "targetCellWidth": 4,
@@ -65,7 +65,7 @@
             },
             {
               "name": "Partner",
-              "label": "Lizen · Partner",
+              "label": "Lizen \u00b7 Partner",
               "description": "Your partner's progress and what they just did",
               "minWidth": "250dp",
               "minHeight": "40dp",
@@ -76,7 +76,7 @@
             },
             {
               "name": "Week",
-              "label": "Lizen · Week",
+              "label": "Lizen \u00b7 Week",
               "description": "This week for both of you, plus the savings goal",
               "minWidth": "250dp",
               "minHeight": "40dp",
@@ -87,7 +87,7 @@
             },
             {
               "name": "Month",
-              "label": "Lizen · Month",
+              "label": "Lizen \u00b7 Month",
               "description": "The month, each day split between the two of you",
               "minWidth": "250dp",
               "minHeight": "110dp",
@@ -99,7 +99,15 @@
           ]
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "# WorkManager (used by the home-screen widgets) finds its Room database\n# implementation by class name, so those names must survive R8.\n-keep class androidx.work.impl.WorkDatabase { *; }\n-keep class androidx.work.impl.WorkDatabase_Impl { *; }\n-keepnames class * extends androidx.room.RoomDatabase\n-keep class * extends androidx.room.RoomDatabase { <init>(); }"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {
