@@ -1,8 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('../database/connection');
-const { User, Task, Completion } = require('../database/models');
+const { User, Task, Completion, Occurrence, Goal, Structure, WeekResult } = require('../database/models');
 const config = require('../config');
+const { signToken, checkPassword, loginLimiter, requireAuth } = require('./auth');
+const occurrences = require('../services/occurrenceService');
+const taskService = require('../services/taskService');
+const { ensureMembers } = require('../services/userService');
+const { isScheduledOn, assigneesOf } = require('../services/schedule');
+const {
+  todayKey, addDays, weekKeyOf, isDateKey, isDayOpen, closeInstant, localParts, daysBetween, toDateKey,
+} = require('../utils/time');
 
 const app = express();
 const router = express.Router();
@@ -10,16 +18,32 @@ const router = express.Router();
 // Get base path from environment or default to empty string
 const BASE_PATH = process.env.BASE_PATH || '';
 
-// Middleware
+// Middleware. Writes need a bearer token, so open CORS does not expose them.
 app.use(cors({
-  origin: '*', // Allow all origins
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
 // Connect to database
-connectDB();
+connectDB().then(ensureMembers).catch((err) => console.error('Startup error:', err));
+
+// Wraps async handlers so thrown errors (with .status) become JSON responses.
+const handle = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (error) {
+    if (!error.status || error.status >= 500) console.error(`${req.method} ${req.path}:`, error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Internal server error' });
+  }
+};
+
+const VALID_TYPES = ['daily', 'weekly', 'custom', 'one-time', 'flexible'];
+
+const VALID_ACTIONS = ['done', 'missed', 'excused', 'undo', 'progress'];
+
+const badRequest = (message) => occurrences.httpError(400, message);
 
 // API Routes
 
@@ -28,494 +52,374 @@ router.get('/', (req, res) => {
   res.send('Telegram Task Tracker API is running');
 });
 
-// Get all users
-router.get('/api/users', async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch users' });
-  }
-});
-
-// Get user by telegram ID
-router.get('/api/users/:telegramId', async (req, res) => {
-  try {
-    const user = await User.findOne({ telegramId: req.params.telegramId });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
-
-// Get all tasks
-router.get('/api/tasks', async (req, res) => {
-  try {
-    const tasks = await Task.find({ active: true });
-    res.json(tasks);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch tasks' });
-  }
-});
-
-// Get completions for a date range
-router.get('/api/completions', async (req, res) => {
-  try {
-    const { userId, startDate, endDate, taskId } = req.query;
-    
-    const query = {};
-    
-    if (userId) query.userId = userId;
-    if (taskId) query.taskId = taskId;
-    
-    if (startDate || endDate) {
-      query.completedAt = {};
-      if (startDate) query.completedAt.$gte = new Date(startDate);
-      if (endDate) query.completedAt.$lte = new Date(endDate);
-    }
-    
-    const completions = await Completion.find(query)
-      .populate('taskId')
-      .sort({ completedAt: -1 });
-    
-    res.json(completions);
-  } catch (error) {
-    console.error('Error fetching completions:', error);
-    res.status(500).json({ error: 'Failed to fetch completions' });
-  }
-});
-
-// Get calendar data for a user
-router.get('/api/calendar/:telegramId', async (req, res) => {
-  try {
-    const { telegramId } = req.params;
-    const { year, month } = req.query;
-    
-    // Get start and end of month
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59);
-    
-    // Query by scheduledFor (primary) OR completedAt (fallback for old data or flexible tasks)
-    const completions = await Completion.find({
-      userId: telegramId,
-      $or: [
-        { scheduledFor: { $gte: startDate, $lte: endDate } },
-        { completedAt: { $gte: startDate, $lte: endDate }, scheduledFor: { $exists: false } }
-      ]
-    }).populate('taskId');
-    
-    // Get all active scheduled tasks assigned to this user
-    const scheduledTasks = await Task.find({ 
-      active: true,
-      assignedTo: telegramId,
-      $or: [
-        { type: 'daily', 'schedule.time': { $exists: true } },
-        { type: 'weekly', 'schedule.time': { $exists: true } },
-        { type: 'custom', 'schedule.time': { $exists: true } },
-        { type: 'one-time', 'schedule.date': { $exists: true } }
-      ]
-    });
-    
-    // Group by date
-    const calendarData = {};
-    
-    // Initialize calendar data with scheduled tasks
-    const daysInMonth = new Date(year, month, 0).getDate();
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-      const dayOfWeek = new Date(year, month - 1, day).getDay();
-      
-      calendarData[date] = {
-        date,
-        completions: [],
-        scheduledTasks: [],
-        totalXp: 0,
-        tasksCompleted: 0,
-        tasksFailed: 0,
-      };
-      
-      // Add scheduled tasks for this day
-      scheduledTasks.forEach(task => {
-        let shouldShow = false;
-        
-        if (task.type === 'daily') {
-          // Only show daily tasks starting from their creation date
-          const createdDate = new Date(task.createdAt);
-          createdDate.setHours(0, 0, 0, 0);
-          const currentDate = new Date(year, month - 1, day);
-          currentDate.setHours(0, 0, 0, 0);
-          shouldShow = currentDate >= createdDate;
-        } else if ((task.type === 'weekly' || task.type === 'custom') && task.schedule.days) {
-          const createdDate = new Date(task.createdAt);
-          createdDate.setHours(0, 0, 0, 0);
-          const currentDate = new Date(year, month - 1, day);
-          currentDate.setHours(0, 0, 0, 0);
-          shouldShow = task.schedule.days.includes(dayOfWeek) && currentDate >= createdDate;
-        } else if (task.type === 'one-time' && task.schedule.date) {
-          const taskDate = new Date(task.schedule.date);
-          taskDate.setHours(0, 0, 0, 0);
-          const currentDate = new Date(year, month - 1, day);
-          currentDate.setHours(0, 0, 0, 0);
-          shouldShow = taskDate.getTime() === currentDate.getTime();
-        }
-        
-        if (shouldShow) {
-          // Check if this task was completed on this day (using scheduledFor, fallback to completedAt)
-          const dayCompletion = completions.find(c => {
-            if (!c.taskId || c.taskId._id.toString() !== task._id.toString()) return false;
-            
-            const completionDate = c.scheduledFor 
-              ? c.scheduledFor.toISOString().split('T')[0]
-              : c.completedAt.toISOString().split('T')[0];
-            
-            return completionDate === date;
-          });
-          
-          calendarData[date].scheduledTasks.push({
-            _id: task._id.toString(),
-            name: task.name,
-            time: task.schedule.time,
-            xpReward: task.xpReward,
-            completed: dayCompletion ? dayCompletion.completed : null,
-            missedConfirmation: dayCompletion ? dayCompletion.missedConfirmation : false,
-          });
-        }
-      });
-    }
-    
-    completions.forEach(completion => {
-      // Use scheduledFor to determine which calendar day to show the completion
-      // This ensures tasks completed after midnight still show on the correct scheduled day
-      const date = completion.scheduledFor 
-        ? completion.scheduledFor.toISOString().split('T')[0]
-        : completion.completedAt.toISOString().split('T')[0]; // fallback for old data
-      
-      if (!calendarData[date]) {
-        calendarData[date] = {
-          date,
-          completions: [],
-          scheduledTasks: [],
-          totalXp: 0,
-          tasksCompleted: 0,
-          tasksFailed: 0,
-        };
-      }
-      
-      calendarData[date].completions.push({
-        taskName: completion.taskId.name,
-        completed: completion.completed,
-        xpEarned: completion.xpEarned,
-        streakCount: completion.streakCount,
-      });
-      
-      calendarData[date].totalXp += completion.xpEarned;
-      if (completion.completed) {
-        calendarData[date].tasksCompleted++;
-      } else {
-        calendarData[date].tasksFailed++;
-      }
-    });
-    
-    res.json(Object.values(calendarData));
-  } catch (error) {
-    console.error('Error fetching calendar data:', error);
-    res.status(500).json({ error: 'Failed to fetch calendar data' });
-  }
-});
-
-// Get stats summary
-router.get('/api/stats/summary', async (req, res) => {
-  try {
-    const users = await User.find();
-    const tasks = await Task.find({ active: true });
-    const completions = await Completion.find();
-    
-    const stats = {
-      totalUsers: users.length,
-      totalTasks: tasks.length,
-      totalCompletions: completions.filter(c => c.completed).length,
-      users: users.map(u => ({
-        telegramId: u.telegramId,
-        username: u.username,
-        level: u.level,
-        xp: u.xp,
-      })),
-    };
-    
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
-
-// Health check
 router.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), today: todayKey() });
 });
 
-// ==================== TASK CRUD OPERATIONS ====================
+// ==================== AUTH ====================
 
-// Create a new task
-router.post('/api/tasks', async (req, res) => {
-  try {
-    const { name, description, type, schedule, createdBy, assignedTo, xpReward } = req.body;
-    
-    // Validation
-    if (!name || !type || !createdBy) {
-      return res.status(400).json({ error: 'Missing required fields: name, type, createdBy' });
-    }
-    
-    const validTypes = ['daily', 'weekly', 'custom', 'one-time', 'flexible'];
-    if (!validTypes.includes(type)) {
-      return res.status(400).json({ error: 'Invalid task type' });
-    }
-    
-    const task = new Task({
-      name,
-      description: description || '',
-      type,
-      schedule: schedule || {},
-      xpReward: xpReward || 10,
-      createdBy,
-      assignedTo: assignedTo || [createdBy],
-      active: true,
-    });
-    
-    await task.save();
-    
-    // Sync to Google Calendar
-    try {
-      const { createCalendarEvent } = require('../services/googleCalendarService');
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const eventId = await createCalendarEvent(task, today);
-      if (eventId) {
-        task.googleCalendarEventId = eventId;
-        await task.save();
-      }
-    } catch (calendarError) {
-      console.error('Failed to create calendar event:', calendarError);
-      // Don't fail the task creation if calendar sync fails
-    }
-    
-    res.status(201).json(task);
-  } catch (error) {
-    console.error('Error creating task:', error);
-    res.status(500).json({ error: 'Failed to create task' });
+// Each member logs in with their own password and gets a 90-day token.
+router.post('/api/auth/login', loginLimiter, handle(async (req, res) => {
+  const member = checkPassword(req.body?.password);
+  if (!member) return res.status(401).json({ error: 'Wrong password' });
+  res.json({ token: signToken(member.id), user: { telegramId: member.id, name: member.name } });
+}));
+
+router.get('/api/auth/me', requireAuth, handle(async (req, res) => {
+  res.json({ telegramId: req.userId, name: config.memberName(req.userId) });
+}));
+
+// ==================== USERS ====================
+
+router.get('/api/users', handle(async (req, res) => {
+  res.json(await User.find({ telegramId: { $in: config.memberIds() } }));
+}));
+
+router.get('/api/users/:telegramId', handle(async (req, res) => {
+  const user = await User.findOne({ telegramId: req.params.telegramId });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json(user);
+}));
+
+// ==================== BOARD (everything on one screen) ====================
+
+// One call with everything the Board screen and the widgets need.
+router.get('/api/board', handle(async (req, res) => {
+  const now = new Date();
+  const today = todayKey(now);
+  const week = weekKeyOf(today);
+  const yesterday = addDays(today, -1);
+
+  const [day, users, goals, feed, lastWeek, sharedStreak, upcoming] = await Promise.all([
+    occurrences.dayView(today, now),
+    User.find({ telegramId: { $in: config.memberIds() } }),
+    Goal.find({ active: true }).lean(),
+    Occurrence.find({ resolvedAt: { $ne: null }, status: { $in: ['done', 'missed', 'ignored', 'excused'] } })
+      .sort({ resolvedAt: -1 }).limit(15).lean(),
+    WeekResult.findOne().sort({ weekKey: -1 }).lean(),
+    occurrences.sharedStreak(now),
+    Task.find({ active: true, type: 'one-time', 'schedule.date': { $gte: new Date(`${today}T00:00:00Z`) } }).lean(),
+  ]);
+
+  // Yesterday stays answerable until it closes; surface what is still pending.
+  const yesterdayOpen = isDayOpen(yesterday, now);
+  const stillOpen = yesterdayOpen
+    ? await Occurrence.find({ date: yesterday, status: 'pending' }).lean()
+    : [];
+
+  const members = await Promise.all(day.map(async (d) => {
+    const user = users.find((u) => u.telegramId === d.userId);
+    const streaks = await occurrences.streaksFor(d.userId, now);
+    const best = Object.entries(streaks).sort((a, b) => b[1] - a[1])[0];
+    return {
+      ...d,
+      level: user?.level || 1,
+      weeklyXp: await occurrences.weeklyXp(d.userId, week),
+      excusesLeft: await occurrences.excusesLeft(d.userId, week),
+      pendingRewards: user?.pendingRewards || [],
+      topStreak: best ? { taskId: best[0], days: best[1] } : null,
+      yesterdayPending: stillOpen.filter((o) => o.userId === d.userId),
+    };
+  }));
+
+  const deadlines = upcoming
+    .map((t) => ({
+      taskId: t._id, name: t.name, area: t.area, date: toDateKey(t.schedule.date), time: t.schedule.time,
+      assignedTo: assigneesOf(t),
+    }))
+    .filter((t) => t.date >= today && daysBetween(today, t.date) <= 14)
+    .map((t) => ({ ...t, daysLeft: daysBetween(today, t.date) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  res.json({
+    today,
+    now: localParts(now).time,
+    weekKey: week,
+    daysLeftInWeek: 6 - daysBetween(week, today),
+    rules: config.rules,
+    members,
+    sharedStreak,
+    goals: goals.map(goalView),
+    deadlines,
+    feed: feed.map((o) => ({ ...o, name: config.memberName(o.userId) })),
+    lastWeek,
+    yesterdayClosesAt: yesterdayOpen ? closeInstant(yesterday) : null,
+  });
+}));
+
+// Both members' occurrences for a day (defaults to today).
+router.get('/api/day', handle(async (req, res) => {
+  const date = req.query.date || todayKey();
+  if (!isDateKey(date)) throw badRequest('date must be YYYY-MM-DD');
+  res.json({ date, open: isDayOpen(date), members: await occurrences.dayView(date) });
+}));
+
+// A week's score for both members, with every penalty listed.
+router.get('/api/week', handle(async (req, res) => {
+  const week = weekKeyOf(req.query.week || todayKey());
+  const penalties = await Occurrence.find({ weekKey: week, penalty: { $gt: 0 } }).sort({ date: 1 }).lean();
+  const members = await Promise.all(config.memberIds().map(async (userId) => ({
+    userId,
+    name: config.memberName(userId),
+    xp: await occurrences.weeklyXp(userId, week),
+    excusesLeft: await occurrences.excusesLeft(userId, week),
+    penalties: penalties.filter((p) => p.userId === userId),
+  })));
+  res.json({ weekKey: week, result: await WeekResult.findOne({ weekKey: week }).lean(), members });
+}));
+
+// ==================== MARKING ====================
+
+// The one write path for done / missed / excused / undo / +n.
+router.post('/api/occurrences/mark', requireAuth, handle(async (req, res) => {
+  const { taskId, date, action, amount } = req.body || {};
+  if (!taskId) throw badRequest('taskId is required');
+  if (!VALID_ACTIONS.includes(action)) throw badRequest(`action must be one of ${VALID_ACTIONS.join(', ')}`);
+  if (date && !isDateKey(date)) throw badRequest('date must be YYYY-MM-DD');
+
+  const result = await occurrences.mark({
+    taskId, userId: req.userId, date, action, amount, source: req.get('X-Client') || 'api',
+  });
+  res.json({ occurrence: result.occurrence, previousStatus: result.previousStatus });
+}));
+
+// Legacy endpoint used by the website's buttons.
+router.post('/api/tasks/:taskId/complete', requireAuth, handle(async (req, res) => {
+  const { userId, completed, scheduledFor } = req.body || {};
+  if (userId && String(userId) !== req.userId) throw occurrences.httpError(403, 'You can only mark your own tasks');
+  const date = isDateKey(scheduledFor) ? scheduledFor : undefined;
+
+  const result = await occurrences.mark({
+    taskId: req.params.taskId, userId: req.userId, date, action: completed ? 'done' : 'missed', source: 'web',
+  });
+  res.status(201).json(result.occurrence);
+}));
+
+// ==================== TASKS ====================
+
+router.get('/api/tasks', handle(async (req, res) => {
+  res.json(await Task.find({ active: true }));
+}));
+
+router.get('/api/tasks/:taskId', handle(async (req, res) => {
+  const task = await Task.findById(req.params.taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  res.json(task);
+}));
+
+router.post('/api/tasks', requireAuth, handle(async (req, res) => {
+  const { name, description, type, schedule, assignedTo, xpReward, ...extra } = req.body || {};
+  if (!name || !type) throw badRequest('Missing required fields: name, type');
+  if (!VALID_TYPES.includes(type)) throw badRequest('Invalid task type');
+  validateSchedule(type, schedule);
+  const assignees = (assignedTo || [req.userId]).map(String);
+  if (!assignees.every(config.isMember)) throw badRequest('assignedTo must only contain members');
+
+  const task = await taskService.createTask(
+    name, description || '', type, schedule || {}, req.userId, xpReward || 10, assignees, extra,
+  );
+  res.status(201).json(task);
+}));
+
+router.put('/api/tasks/:taskId', requireAuth, handle(async (req, res) => {
+  const updates = req.body || {};
+  if (updates.assignedTo && !updates.assignedTo.map(String).every(config.isMember)) {
+    throw badRequest('assignedTo must only contain members');
   }
+  const existing = await Task.findById(req.params.taskId);
+  if (!existing) return res.status(404).json({ error: 'Task not found' });
+  if (updates.schedule) validateSchedule(existing.type, { ...existing.schedule?.toObject?.(), ...updates.schedule });
+
+  const task = await taskService.updateTask(req.params.taskId, updates);
+
+  try {
+    const { updateCalendarEvent } = require('../services/googleCalendarService');
+    if (task.googleCalendarEventId) {
+      await updateCalendarEvent(task.googleCalendarEventId, req.userId, {
+        summary: task.name,
+        description: task.description,
+      });
+    }
+  } catch (calendarError) {
+    console.error('Failed to update calendar event:', calendarError);
+  }
+
+  res.json(task);
+}));
+
+// Soft delete: history stays, today's and future pending occurrences are voided.
+router.delete('/api/tasks/:taskId', requireAuth, handle(async (req, res) => {
+  const task = await taskService.deleteTask(req.params.taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  try {
+    const { deleteCalendarEvent } = require('../services/googleCalendarService');
+    if (task.googleCalendarEventId) await deleteCalendarEvent(task.googleCalendarEventId, req.userId);
+  } catch (calendarError) {
+    console.error('Failed to delete calendar event:', calendarError);
+  }
+
+  res.json({ success: true, message: 'Task deleted successfully' });
+}));
+
+function validateSchedule(type, schedule = {}) {
+  if (schedule.time && !/^\d{1,2}:\d{2}$/.test(schedule.time)) throw badRequest('schedule.time must be HH:MM');
+  if ((type === 'weekly' || type === 'custom')
+    && (!Array.isArray(schedule.days) || !schedule.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6))) {
+    throw badRequest('schedule.days must be a list of weekdays 0-6');
+  }
+  if (type === 'one-time' && !schedule.date) throw badRequest('schedule.date is required for one-time tasks');
+}
+
+// ==================== GOALS & STRUCTURE ====================
+
+const goalView = (g) => {
+  const current = (g.contributions || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+  const byMember = Object.fromEntries(config.memberIds().map((id) => [
+    id, (g.contributions || []).filter((c) => c.userId === id).reduce((s, c) => s + c.amount, 0),
+  ]));
+  return {
+    _id: g._id, name: g.name, target: g.target, unit: g.unit, owner: g.owner, area: g.area,
+    current, byMember, percent: g.target ? Math.min(100, Math.round((current / g.target) * 100)) : 0,
+    recent: (g.contributions || []).slice(-5).reverse(),
+  };
+};
+
+router.get('/api/goals', handle(async (req, res) => {
+  res.json((await Goal.find({ active: true }).lean()).map(goalView));
+}));
+
+router.post('/api/goals/:goalId/contribute', requireAuth, handle(async (req, res) => {
+  const amount = Number(req.body?.amount);
+  if (!Number.isFinite(amount) || amount === 0) throw badRequest('amount must be a non-zero number');
+  const goal = await Goal.findByIdAndUpdate(
+    req.params.goalId,
+    { $push: { contributions: { userId: req.userId, amount, note: String(req.body?.note || '') } } },
+    { new: true },
+  ).lean();
+  if (!goal) return res.status(404).json({ error: 'Goal not found' });
+  res.json(goalView(goal));
+}));
+
+router.get('/api/structure', handle(async (req, res) => {
+  res.json(await Structure.find().sort({ owner: 1, sort: 1 }).lean());
+}));
+
+// ==================== CALENDAR & HISTORY ====================
+
+const calendarEntry = (o) => ({
+  _id: String(o.taskId),
+  name: o.taskName,
+  time: o.time,
+  xpReward: 0,
+  status: o.status,
+  progress: o.progress,
+  target: o.target,
+  penalty: o.penalty,
+  completed: o.status === 'done' ? true : (o.status === 'missed' || o.status === 'ignored') ? false : null,
+  missedConfirmation: o.status === 'ignored',
 });
 
-// Update an existing task
-router.put('/api/tasks/:taskId', async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { name, description, schedule, assignedTo } = req.body;
-    
-    const task = await Task.findById(taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    // Update fields
-    if (name) task.name = name;
-    if (description !== undefined) task.description = description;
-    if (schedule) {
-      task.schedule = { ...task.schedule, ...schedule };
-      task.markModified('schedule');
-    }
-    if (assignedTo) task.assignedTo = assignedTo;
-    
-    await task.save();
-    
-    // Update Google Calendar event
-    try {
-      const { updateCalendarEvent } = require('../services/googleCalendarService');
-      if (task.googleCalendarEventId) {
-        const userId = task.assignedTo?.includes(require('../config').users.user1.id) 
-          ? require('../config').users.user1.id 
-          : task.createdBy;
-        
-        await updateCalendarEvent(task.googleCalendarEventId, userId, {
-          summary: task.name,
-          description: task.description,
+// Past days come from frozen occurrences; future days are projected from the
+// current schedule.
+router.get('/api/calendar/:telegramId', handle(async (req, res) => {
+  const { telegramId } = req.params;
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month || month < 1 || month > 12) throw badRequest('year and month are required');
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const first = `${year}-${pad(month)}-01`;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const last = `${year}-${pad(month)}-${pad(daysInMonth)}`;
+  const today = todayKey();
+
+  // Make sure the open days (today, and yesterday until it closes) exist.
+  for (const d of [addDays(today, -1), today]) {
+    if (d >= first && d <= last && isDayOpen(d)) await occurrences.ensureDay(d);
+  }
+
+  const [rows, tasks] = await Promise.all([
+    Occurrence.find({ userId: telegramId, date: { $gte: first, $lte: last }, status: { $ne: 'void' } })
+      .sort({ time: 1 }).lean(),
+    Task.find({ active: true, assignedTo: telegramId }).lean(),
+  ]);
+
+  const days = [];
+  for (let n = 1; n <= daysInMonth; n++) {
+    const date = `${year}-${pad(month)}-${pad(n)}`;
+    const own = rows.filter((o) => o.date === date);
+    const scheduledTasks = own.map(calendarEntry);
+
+    if (date > today) {
+      for (const task of tasks) {
+        if (!isScheduledOn(task, date) || own.some((o) => String(o.taskId) === String(task._id))) continue;
+        scheduledTasks.push({
+          _id: String(task._id), name: task.name, time: task.schedule?.time, xpReward: 0,
+          status: 'scheduled', progress: 0, target: task.target || 1, penalty: 0,
+          completed: null, missedConfirmation: false,
         });
       }
-    } catch (calendarError) {
-      console.error('Failed to update calendar event:', calendarError);
     }
-    
-    res.json(task);
-  } catch (error) {
-    console.error('Error updating task:', error);
-    res.status(500).json({ error: 'Failed to update task' });
-  }
-});
 
-// Delete a task (soft delete)
-router.delete('/api/tasks/:taskId', async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    
-    const task = await Task.findById(taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    task.active = false;
-    await task.save();
-    
-    // Delete from Google Calendar
-    try {
-      const { deleteCalendarEvent } = require('../services/googleCalendarService');
-      if (task.googleCalendarEventId) {
-        const userId = task.assignedTo?.includes(require('../config').users.user1.id) 
-          ? require('../config').users.user1.id 
-          : task.createdBy;
-        
-        await deleteCalendarEvent(task.googleCalendarEventId, userId);
-      }
-    } catch (calendarError) {
-      console.error('Failed to delete calendar event:', calendarError);
-    }
-    
-    res.json({ success: true, message: 'Task deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting task:', error);
-    res.status(500).json({ error: 'Failed to delete task' });
-  }
-});
-
-// Mark task as complete/incomplete
-router.post('/api/tasks/:taskId/complete', async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { userId, completed, scheduledFor } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
-    
-    const task = await Task.findById(taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    // Check if user is assigned to this task
-    if (task.assignedTo && task.assignedTo.length > 0 && !task.assignedTo.includes(userId)) {
-      return res.status(403).json({ error: 'User not assigned to this task' });
-    }
-    
-    // Calculate proper scheduledFor date
-    let scheduledForDate = scheduledFor ? new Date(scheduledFor) : new Date();
-    scheduledForDate.setHours(0, 0, 0, 0);
-    
-    // Check if completion already exists for this task/user/date
-    const existingCompletion = await Completion.findOne({
-      taskId: task._id,
-      userId: userId,
-      scheduledFor: scheduledForDate,
+    const resolved = own.filter((o) => ['done', 'missed', 'ignored'].includes(o.status));
+    days.push({
+      date,
+      completions: resolved.map((o) => ({
+        taskName: o.taskName, completed: o.status === 'done', xpEarned: -o.penalty, streakCount: 0,
+      })),
+      scheduledTasks,
+      totalXp: -own.reduce((sum, o) => sum + (o.penalty || 0), 0),
+      tasksCompleted: own.filter((o) => o.status === 'done').length,
+      tasksFailed: own.filter((o) => o.status === 'missed' || o.status === 'ignored').length,
     });
-    
-    if (existingCompletion) {
-      // Update existing completion
-      existingCompletion.completed = completed;
-      existingCompletion.completedAt = new Date();
-      await existingCompletion.save();
-      
-      // Update Google Calendar event
-      try {
-        const { markEventCompleted, markEventMissed } = require('../services/googleCalendarService');
-        if (task.googleCalendarEventId) {
-          if (completed) {
-            await markEventCompleted(task.googleCalendarEventId, userId, task.name);
-          } else {
-            await markEventMissed(task.googleCalendarEventId, userId, task.name);
-          }
-        }
-      } catch (calendarError) {
-        console.error('Failed to update calendar event status:', calendarError);
-      }
-      
-      return res.json(existingCompletion);
-    }
-    
-    // Create new completion
-    const { recordCompletion } = require('../services/userService');
-    const { getOrCreateUser } = require('../services/userService');
-    const User = require('../database/models').User;
-    const user = await User.findOne({ telegramId: userId });
-    const username = user?.username || 'User';
-    
-    await getOrCreateUser(userId, username);
-    const result = await recordCompletion(taskId, userId, completed, false);
-    
-    // Update Google Calendar event
-    try {
-      const { markEventCompleted, markEventMissed } = require('../services/googleCalendarService');
-      if (task.googleCalendarEventId) {
-        if (completed) {
-          await markEventCompleted(task.googleCalendarEventId, userId, task.name);
-        } else {
-          await markEventMissed(task.googleCalendarEventId, userId, task.name);
-        }
-      }
-    } catch (calendarError) {
-      console.error('Failed to update calendar event status:', calendarError);
-    }
-    
-    res.status(201).json(result);
-  } catch (error) {
-    console.error('Error marking task complete:', error);
-    res.status(500).json({ error: 'Failed to mark task complete' });
   }
-});
 
-// Get task by ID
-router.get('/api/tasks/:taskId', async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const task = await Task.findById(taskId);
-    
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    res.json(task);
-  } catch (error) {
-    console.error('Error fetching task:', error);
-    res.status(500).json({ error: 'Failed to fetch task' });
+  res.json(days);
+}));
+
+// Legacy: raw completion records from before occurrences existed.
+router.get('/api/completions', handle(async (req, res) => {
+  const { userId, startDate, endDate, taskId } = req.query;
+  const query = {};
+  if (userId) query.userId = userId;
+  if (taskId) query.taskId = taskId;
+  if (startDate || endDate) {
+    query.completedAt = {};
+    if (startDate) query.completedAt.$gte = new Date(startDate);
+    if (endDate) query.completedAt.$lte = new Date(endDate);
   }
-});
+  res.json(await Completion.find(query).populate('taskId').sort({ completedAt: -1 }));
+}));
+
+router.get('/api/stats/summary', handle(async (req, res) => {
+  const users = await User.find({ telegramId: { $in: config.memberIds() } });
+  res.json({
+    totalUsers: users.length,
+    totalTasks: await Task.countDocuments({ active: true }),
+    totalCompletions: await Occurrence.countDocuments({ status: 'done' }),
+    users: users.map((u) => ({ telegramId: u.telegramId, username: u.username, level: u.level, weeklyXp: u.weeklyXp })),
+  });
+}));
 
 // ==================== GOOGLE CALENDAR OAUTH ====================
 
-// Google Calendar OAuth - Get authorization URL
-router.get('/api/auth/google/url', (req, res) => {
-  try {
-    const { getAuthUrl } = require('../services/googleCalendarService');
-    const authUrl = getAuthUrl();
-    res.json({ authUrl });
-  } catch (error) {
-    console.error('Error generating auth URL:', error);
-    res.status(500).json({ error: 'Failed to generate authorization URL' });
-  }
-});
+router.get('/api/auth/google/url', requireAuth, handle(async (req, res) => {
+  const { getAuthUrl } = require('../services/googleCalendarService');
+  res.json({ authUrl: getAuthUrl() });
+}));
 
-// Google Calendar OAuth - Callback
 router.get('/api/auth/google/callback', async (req, res) => {
   try {
     const { code } = req.query;
-    
+
     if (!code) {
       return res.status(400).send('No authorization code provided');
     }
-    
+
     const { getTokensFromCode } = require('../services/googleCalendarService');
     const tokens = await getTokensFromCode(code);
-    
+
     // Display the refresh token for user to add to .env
     res.send(`
       <html>
@@ -525,8 +429,6 @@ router.get('/api/auth/google/callback', async (req, res) => {
           <p>Copy this refresh token and add it to your <code>.env</code> file:</p>
           <pre style="background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto;">
 USER1_GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}
-# or
-USER2_GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}
           </pre>
           <p><strong>Important:</strong> Keep this token secure and don't share it publicly!</p>
           <p>After adding the token to your <code>.env</code> file, restart the bot.</p>
@@ -548,18 +450,17 @@ if (BASE_PATH) {
   app.use('/', router);
 }
 
-// 404 handler for debugging
 app.use((req, res) => {
-  console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
-  console.log(`Base Path: ${BASE_PATH}`);
-  res.status(404).send(`Cannot ${req.method} ${req.originalUrl} (Base Path: ${BASE_PATH})`);
+  res.status(404).json({ error: `Cannot ${req.method} ${req.originalUrl}` });
 });
 
-// Start server
-const PORT = config.api.port;
-app.listen(PORT, () => {
-  console.log(`API server running on port ${PORT}`);
-  console.log(`Base path: ${BASE_PATH || '(root)'}`);
-});
+// Start server (skipped when a test imports the app)
+if (require.main === module || process.env.START_API !== 'false') {
+  const PORT = config.api.port;
+  app.listen(PORT, () => {
+    console.log(`API server running on port ${PORT}`);
+    console.log(`Base path: ${BASE_PATH || '(root)'}`);
+  });
+}
 
 module.exports = app;

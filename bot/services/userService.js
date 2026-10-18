@@ -1,208 +1,92 @@
-const { User, Task, Completion } = require('../database/models');
+const { User, Task, Occurrence, Meta } = require('../database/models');
 const config = require('../config');
+const { todayKey, weekKeyOf, toDateKey } = require('../utils/time');
+const occurrences = require('./occurrenceService');
 
-// Calculate XP needed for a level
-const xpForLevel = (level) => {
-  return Math.floor(100 * Math.pow(1.5, level - 1));
-};
-
-// Check if user leveled up
-const checkLevelUp = (xp, currentLevel) => {
-  let level = currentLevel;
-  let totalXpNeeded = 0;
-  
-  for (let i = 1; i <= level; i++) {
-    totalXpNeeded += xpForLevel(i);
-  }
-  
-  while (xp >= totalXpNeeded + xpForLevel(level + 1)) {
-    level++;
-    totalXpNeeded += xpForLevel(level);
-  }
-  
-  return level;
-};
-
-// Get or create user
+// Only the two configured members are ever users; anyone else gets null.
 const getOrCreateUser = async (telegramId, username) => {
+  telegramId = String(telegramId);
+  if (!config.isMember(telegramId)) return null;
+
   let user = await User.findOne({ telegramId });
-  
   if (!user) {
-    user = new User({
+    user = await User.create({
       telegramId,
-      username,
+      username: username || config.memberName(telegramId),
       xp: 0,
       level: 1,
+      weeklyXp: config.rules.startXp,
       streaks: new Map(),
       lastCompletions: new Map(),
     });
-    await user.save();
   }
-  
   return user;
 };
 
-// Record task completion
-const recordCompletion = async (taskId, userId, completed, advanceCompletion = false) => {
-  const task = await Task.findById(taskId);
-  const user = await User.findOne({ telegramId: userId });
-  
-  if (!task || !user) {
-    throw new Error('Task or user not found');
-  }
-  
-  let xpEarned = 0;
-  let streakCount = 0;
-  
-  if (completed) {
-    // No XP reward - just track completion
-    xpEarned = 0;
-    
-    // Check streak
-    const lastCompletion = user.lastCompletions.get(taskId.toString());
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (lastCompletion) {
-      const lastDate = new Date(lastCompletion);
-      lastDate.setHours(0, 0, 0, 0);
-      const daysDiff = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
-      
-      if (daysDiff === 1) {
-        // Continuing streak
-        streakCount = (user.streaks.get(taskId.toString()) || 0) + 1;
-        // No bonus XP for streaks
-      } else if (daysDiff === 0) {
-        // Already completed today
-        streakCount = user.streaks.get(taskId.toString()) || 0;
-      } else {
-        // Streak broken
-        streakCount = 1;
-      }
-    } else {
-      // First completion
-      streakCount = 1;
-    }
-    
-    // Update user streaks only (no XP gain)
-    user.streaks.set(taskId.toString(), streakCount);
-    user.lastCompletions.set(taskId.toString(), today);
-    
-    // No level up for completions anymore - levels only increase from weekly wins
-    await user.save();
-    
-    // Calculate proper scheduledFor date
-    let scheduledForDate = new Date();
-    scheduledForDate.setHours(0, 0, 0, 0);
-    
-    // For flexible tasks, use today; for scheduled tasks, use their scheduled date
-    if (task.type !== 'flexible' && task.schedule) {
-      if (task.type === 'one-time' && task.schedule.date) {
-        scheduledForDate = new Date(task.schedule.date);
-        scheduledForDate.setHours(0, 0, 0, 0);
-      }
-      // For daily/weekly/custom, use today since they're completing on schedule
-    }
-    
-    // Record completion
-    const completion = new Completion({
-      taskId,
-      userId,
-      completed: true,
-      xpEarned: 0, // No XP for completing tasks
-      streakCount,
-      scheduledFor: scheduledForDate,
-      advanceCompletion: advanceCompletion,
-    });
-    await completion.save();
-    
-    return { xpEarned: 0, streakCount, leveledUp: false, newLevel: user.level, taskName: task.name };
-  } else {
-    // Reset streak and subtract 10 XP from weeklyXp
-    user.streaks.set(taskId.toString(), 0);
-    user.weeklyXp = Math.max(0, (user.weeklyXp || 100) - 10); // Subtract 10 XP, minimum 0
-    await user.save();
-    
-    // Calculate proper scheduledFor date
-    let scheduledForDate = new Date();
-    scheduledForDate.setHours(0, 0, 0, 0);
-    
-    if (task.type !== 'flexible' && task.schedule) {
-      if (task.type === 'one-time' && task.schedule.date) {
-        scheduledForDate = new Date(task.schedule.date);
-        scheduledForDate.setHours(0, 0, 0, 0);
-      }
-    }
-    
-    // Record non-completion
-    const completion = new Completion({
-      taskId,
-      userId,
-      completed: false,
-      xpEarned: 0,
-      xpPenalty: 10,
-      streakCount: 0,
-      scheduledFor: scheduledForDate,
-    });
-    await completion.save();
-    
-    return { xpEarned: 0, xpPenalty: 10, streakCount: 0, leveledUp: false, taskName: task.name };
-  }
+// Before anything recomputes user.weeklyXp from occurrences, record the XP the
+// old system left behind, once, so the migration can carry this week over
+// exactly even if the new code started running before the migration did.
+const snapshotLegacyXp = async () => {
+  if (await Meta.exists({ key: 'legacyWeeklyXp' })) return;
+  const users = await User.find({ telegramId: { $in: config.memberIds() } });
+  const takenAt = new Date();
+  // The old system's weeks turned over at Monday closeHour, not midnight.
+  const week = weekKeyOf(toDateKey(new Date(takenAt - config.rules.closeHour * 3600000)));
+  const xp = Object.fromEntries(users.map((u) => [u.telegramId, u.weeklyXp]));
+  await Meta.updateOne(
+    { key: 'legacyWeeklyXp' },
+    { $setOnInsert: { value: { takenAt, week, xp } } },
+    { upsert: true },
+  );
 };
 
-// Get user stats
+const ensureMembers = async () => {
+  await snapshotLegacyXp();
+  await Promise.all(config.memberIds().map((id) => getOrCreateUser(id, config.memberName(id))));
+};
+
 const getUserStats = async (userId) => {
-  const user = await User.findOne({ telegramId: userId });
+  const user = await User.findOne({ telegramId: String(userId) });
   if (!user) return null;
-  
-  const completions = await Completion.find({ userId, completed: true });
-  const totalTasks = completions.length;
-  
-  // Get current streaks
-  const streaks = {};
-  for (const [taskId, streakCount] of user.streaks.entries()) {
-    if (streakCount > 0) {
-      const task = await Task.findById(taskId);
-      if (task) {
-        streaks[task.name] = streakCount;
-      }
-    }
-  }
-  
-  // Calculate XP needed for next level
-  const xpForNextLevel = xpForLevel(user.level + 1);
-  let xpInCurrentLevel = user.xp;
-  for (let i = 1; i <= user.level; i++) {
-    xpInCurrentLevel -= xpForLevel(i);
-  }
-  
+
+  const week = weekKeyOf(todayKey());
+  const [weeklyXp, excusesLeft, totalTasksCompleted, streakMap] = await Promise.all([
+    occurrences.weeklyXp(userId, week),
+    occurrences.excusesLeft(userId, week),
+    Occurrence.countDocuments({ userId: String(userId), status: 'done' }),
+    occurrences.streaksFor(userId),
+  ]);
+
+  const activeStreaks = {};
+  const ids = Object.keys(streakMap).filter((id) => streakMap[id] > 0);
+  const tasks = await Task.find({ _id: { $in: ids }, active: true }).select('name');
+  for (const t of tasks) activeStreaks[t.name] = streakMap[String(t._id)];
+
   return {
     username: user.username,
     level: user.level,
-    xp: user.xp,
-    weeklyXp: user.weeklyXp || 100,
-    xpInCurrentLevel,
-    xpForNextLevel,
-    totalTasksCompleted: totalTasks,
-    activeStreaks: streaks,
+    weeklyXp,
+    excusesLeft,
+    totalTasksCompleted,
+    activeStreaks,
+    pendingRewards: user.pendingRewards || [],
   };
 };
 
-// Get leaderboard
 const getLeaderboard = async () => {
-  const users = await User.find().sort({ xp: -1 }).limit(10);
-  return users.map(user => ({
-    username: user.username,
-    level: user.level,
-    xp: user.xp,
-    weeklyXp: user.weeklyXp || 100,
-  }));
+  const week = weekKeyOf(todayKey());
+  const users = await User.find({ telegramId: { $in: config.memberIds() } });
+  const rows = await Promise.all(users.map(async (u) => ({
+    username: u.username,
+    level: u.level,
+    weeklyXp: await occurrences.weeklyXp(u.telegramId, week),
+  })));
+  return rows.sort((a, b) => b.weeklyXp - a.weeklyXp || b.level - a.level);
 };
 
 module.exports = {
   getOrCreateUser,
-  recordCompletion,
+  ensureMembers,
   getUserStats,
   getLeaderboard,
-  xpForLevel,
 };

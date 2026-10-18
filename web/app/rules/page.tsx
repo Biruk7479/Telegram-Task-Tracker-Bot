@@ -109,7 +109,7 @@ export default function RulesPage() {
               <div className="flex items-start gap-3">
                 <span className="text-blue-600 dark:text-blue-400 font-bold mt-1">•</span>
                 <p className="text-lg">
-                  XP resets every <span className="font-bold text-blue-600 dark:text-blue-400">Monday at 6:00 AM</span> (Ethiopia Time, UTC+3)
+                  Weeks run <span className="font-bold text-blue-600 dark:text-blue-400">Monday to Sunday</span> and settle on <span className="font-bold text-blue-600 dark:text-blue-400">Monday at 6:00 AM</span>, once Sunday has closed (Ethiopia Time, UTC+3)
                 </p>
               </div>
               <div className="flex items-start gap-3">
@@ -187,7 +187,21 @@ export default function RulesPage() {
                     <span className="text-2xl">❌</span>
                     <h3 className="font-bold text-lg text-red-700 dark:text-red-300">Click No</h3>
                   </div>
-                  <p>Lose 10 XP immediately. Streak resets to 0.</p>
+                  <p>Lose 10 XP. Streak resets to 0. Changed your mind? Switching to Yes before the day closes gives the XP back.</p>
+                </div>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-5 border border-yellow-200 dark:border-yellow-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🙏</span>
+                    <h3 className="font-bold text-lg text-yellow-700 dark:text-yellow-300">Click Excuse</h3>
+                  </div>
+                  <p>No XP lost and your streak is kept. Only 2 excuses per week, so save them for real reasons.</p>
+                </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">➕</span>
+                    <h3 className="font-bold text-lg text-blue-700 dark:text-blue-300">Counter tasks</h3>
+                  </div>
+                  <p>Tasks like &quot;2 job applications&quot; take ➕1 taps. Reaching the target counts as done; finishing short of it counts as a No.</p>
                 </div>
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
@@ -198,91 +212,36 @@ export default function RulesPage() {
             </div>
           </section>
 
-          {/* Differential Penalty System - THE KEY RULE */}
+          {/* Penalties - THE KEY RULE */}
           <section className="bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 dark:from-red-900/30 dark:via-orange-900/30 dark:to-yellow-900/30 rounded-2xl shadow-xl p-8 mb-6 border-4 border-red-300 dark:border-red-700">
             <div className="flex items-start gap-4 mb-6">
               <div className="text-5xl">⚖️</div>
               <div>
                 <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-2">
-                  Differential Penalty System
+                  Penalties
                 </h2>
                 <p className="text-red-700 dark:text-red-300 text-lg font-semibold">
-                  🔥 This is the core competitive mechanic!
+                  🔥 XP only goes down. Ignoring a task costs more than an honest No.
                 </p>
               </div>
             </div>
-            
+
             <div className="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-md">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">How It Works</h3>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <span className="flex-shrink-0 w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center font-bold">1</span>
-                  <p className="text-lg text-gray-700 dark:text-gray-300 pt-0.5">
-                    Every day at <span className="font-bold">6:00 AM</span>, the system counts how many tasks each person missed (didn't confirm before the deadline)
-                  </p>
-                </div>
-                <div className="flex gap-4">
-                  <span className="flex-shrink-0 w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center font-bold">2</span>
-                  <p className="text-lg text-gray-700 dark:text-gray-300 pt-0.5">
-                    It calculates the <span className="font-bold text-red-600 dark:text-red-400">difference</span> between how many tasks each person missed
-                  </p>
-                </div>
-                <div className="flex gap-4">
-                  <span className="flex-shrink-0 w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center font-bold">3</span>
-                  <div className="text-lg text-gray-700 dark:text-gray-300 pt-0.5">
-                    <p className="mb-2">The person who missed <span className="font-bold text-red-600 dark:text-red-400">MORE</span> tasks gets their XP reduced using this formula:</p>
-                    <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 font-mono text-center">
-                      <p className="text-red-600 dark:text-red-400 font-bold">New XP = Lowest XP − (Difference × 10)</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="flex-shrink-0 w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">4</span>
-                  <p className="text-lg text-gray-700 dark:text-gray-300 pt-0.5">
-                    The other person's XP <span className="font-bold text-green-600 dark:text-green-400">stays unchanged</span>
-                  </p>
-                </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">What each answer costs</h3>
+              <div className="divide-y divide-gray-200 dark:divide-gray-700 text-lg text-gray-700 dark:text-gray-300">
+                <div className="flex justify-between py-3"><span>✅ Done</span><span className="font-mono font-bold text-green-600 dark:text-green-400">0</span></div>
+                <div className="flex justify-between py-3"><span>🙏 Excused (2 per week)</span><span className="font-mono font-bold text-yellow-600 dark:text-yellow-400">0</span></div>
+                <div className="flex justify-between py-3"><span>❌ Said No, or a counter short of its target</span><span className="font-mono font-bold text-red-600 dark:text-red-400">−10</span></div>
+                <div className="flex justify-between py-3"><span>👻 Never answered before the day closed</span><span className="font-mono font-bold text-red-600 dark:text-red-400">−15</span></div>
               </div>
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-xl p-6 mb-6 shadow-md">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Example Scenario</h3>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Example</h3>
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 space-y-3 font-mono text-sm">
-                <div>
-                  <p className="text-blue-600 dark:text-blue-400 font-bold mb-2">📊 Starting Status:</p>
-                  <p className="ml-4">• Zen: 80 XP</p>
-                  <p className="ml-4">• Lily: 100 XP</p>
-                </div>
-                <div>
-                  <p className="text-orange-600 dark:text-orange-400 font-bold mb-2">📅 Yesterday's Missed Tasks:</p>
-                  <p className="ml-4">• Zen: 2 missed</p>
-                  <p className="ml-4">• Lily: 3 missed</p>
-                </div>
-                <div>
-                  <p className="text-red-600 dark:text-red-400 font-bold mb-2">⚖️ Penalty Calculation:</p>
-                  <p className="ml-4">• Difference: |3 - 2| = 1 task</p>
-                  <p className="ml-4">• Lily missed MORE (3 vs 2)</p>
-                  <p className="ml-4">• Lowest current XP: 80 (Zen's XP)</p>
-                  <p className="ml-4 text-red-600 dark:text-red-400 font-bold">• Lily's new XP: 80 − (1 × 10) = 70 XP</p>
-                </div>
-                <div>
-                  <p className="text-green-600 dark:text-green-400 font-bold mb-2">✅ Final Result:</p>
-                  <p className="ml-4">• Zen: 80 XP (no change)</p>
-                  <p className="ml-4 text-red-600 dark:text-red-400 font-bold">• Lily: 100 → 70 XP (-30 XP total!)</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-yellow-100 dark:bg-yellow-900/40 rounded-xl p-6 border-2 border-yellow-400 dark:border-yellow-600">
-              <div className="flex gap-3">
-                <span className="text-3xl">💡</span>
-                <div>
-                  <h4 className="text-xl font-bold text-yellow-900 dark:text-yellow-200 mb-2">Key Strategic Insight</h4>
-                  <p className="text-yellow-900 dark:text-yellow-100 text-lg">
-                    The penalty pulls you down to the <span className="font-bold">lowest person's level</span>, minus the difference. 
-                    This means if you're already behind and miss more tasks, you fall even further behind! The system rewards consistency.
-                  </p>
-                </div>
+                <p>Monday: Zen says No to Gym, Lily ignores Bible and finishes 1 of 2 job applications.</p>
+                <p className="ml-4">• Zen: 100 − 10 = <span className="font-bold">90 XP</span></p>
+                <p className="ml-4">• Lily: 100 − 15 − 10 = <span className="font-bold text-red-600 dark:text-red-400">75 XP</span></p>
               </div>
             </div>
 
@@ -291,46 +250,23 @@ export default function RulesPage() {
               <div className="space-y-2 text-gray-700 dark:text-gray-300">
                 <div className="flex gap-2">
                   <span>🤝</span>
-                  <p>Both miss equal tasks → No penalty for anyone</p>
+                  <p>Shared (pooled) tasks have one result: if either of you does it, it counts for both; if it is missed, you both lose the XP</p>
                 </div>
                 <div className="flex gap-2">
-                  <span>⚖️</span>
-                  <p>XP is tied → Person who missed more still gets penalized using the formula</p>
+                  <span>🔌</span>
+                  <p>If the bot was down for a whole day, that day does not count: nobody could answer, so nobody is penalized</p>
+                </div>
+                <div className="flex gap-2">
+                  <span>✏️</span>
+                  <p>Editing or deleting a task never changes past days, and stops today&apos;s unanswered copy from counting</p>
                 </div>
                 <div className="flex gap-2">
                   <span>🛡️</span>
-                  <p>Penalty cannot reduce XP below 0 (minimum is 0 XP)</p>
+                  <p>XP cannot go below 0</p>
                 </div>
               </div>
             </div>
           </section>
-
-          {/* Manual "No" Penalty */}
-          <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="text-5xl">❌</div>
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                  Manual "No" Response
-                </h2>
-                <p className="text-gray-600 dark:text-gray-400">When you click "No" on a task confirmation</p>
-              </div>
-            </div>
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 border border-red-200 dark:border-red-800">
-              <div className="space-y-3 text-gray-700 dark:text-gray-300">
-                <p className="text-lg">
-                  <span className="font-bold text-red-600 dark:text-red-400">Immediate penalty:</span> Lose 10 XP right away (not differential)
-                </p>
-                <p className="text-lg">
-                  Your streak for that task resets to 0
-                </p>
-                <p className="text-lg">
-                  This is separate from the differential penalty system
-                </p>
-              </div>
-            </div>
-          </section>
-
 
           {/* Weekly Winner */}
           <section className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 rounded-2xl shadow-lg p-8 mb-6 border-2 border-purple-300 dark:border-purple-700">
@@ -457,14 +393,14 @@ export default function RulesPage() {
                   <span className="text-2xl">⚖️</span>
                   <h3 className="font-bold text-lg text-gray-900 dark:text-white">Understand the Penalty</h3>
                 </div>
-                <p className="text-gray-700 dark:text-gray-300">The differential penalty amplifies leads - consistency is key!</p>
+                <p className="text-gray-700 dark:text-gray-300">Answer every reminder — even a No costs less than ignoring it</p>
               </div>
               <div className="bg-white dark:bg-gray-800 rounded-xl p-5">
                 <div className="flex gap-3 mb-2">
                   <span className="text-2xl">🚀</span>
                   <h3 className="font-bold text-lg text-gray-900 dark:text-white">Start Strong</h3>
                 </div>
-                <p className="text-gray-700 dark:text-gray-300">Early XP loss compounds with differential penalties throughout the week</p>
+                <p className="text-gray-700 dark:text-gray-300">Save your 2 excuses for days that really need them</p>
               </div>
             </div>
           </section>

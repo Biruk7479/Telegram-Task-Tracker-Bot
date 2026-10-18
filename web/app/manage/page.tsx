@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiService, Task } from '@/lib/api';
+import { apiService, auth, Task } from '@/lib/api';
 import TaskManager from '@/components/TaskManager';
 import TaskCompletionButton from '@/components/TaskCompletionButton';
 import GoogleCalendarAuth from '@/components/GoogleCalendarAuth';
@@ -17,13 +17,13 @@ export default function ManageTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<'zen' | 'lily'>('zen');
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   // Check if already authenticated
   useEffect(() => {
-    const auth = sessionStorage.getItem('taskTrackerAuth');
-    if (auth === 'true') {
+    const user = auth.getUser();
+    if (auth.getToken() && user) {
+      setCurrentUser(user.telegramId === LILY_ID ? 'lily' : 'zen');
       setIsAuthenticated(true);
       fetchTasks();
     }
@@ -46,18 +46,16 @@ export default function ManageTasksPage() {
     }
   }, [darkMode]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Each member has their own password, checked by the API; it decides who you are.
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple password check - matches .env AUTH_PASSWORD
-    // In production, you'd want this validated server-side
-    const correctPassword = 'YourSecurePassword123'; // Should match AUTH_PASSWORD in .env
-    
-    if (password === correctPassword) {
+    try {
+      const user = await apiService.login(password);
+      setCurrentUser(user.telegramId === LILY_ID ? 'lily' : 'zen');
       setIsAuthenticated(true);
-      sessionStorage.setItem('taskTrackerAuth', 'true');
       setError('');
       fetchTasks();
-    } else {
+    } catch {
       setError('Incorrect password. Only Zen and Lily can access this page.');
       setPassword('');
     }
@@ -65,8 +63,25 @@ export default function ManageTasksPage() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    sessionStorage.removeItem('taskTrackerAuth');
+    auth.clear();
     setPassword('');
+  };
+
+  const fetchTasks = async () => {
+    setLoading(true);
+    try {
+      const data = await apiService.getTasks();
+      setTasks(data);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentUserId = () => currentUser === 'zen' ? ZEN_ID : LILY_ID;
+  const getPartnerUserId = () => currentUser === 'zen' ? LILY_ID : ZEN_ID;
+
   // Login page
   if (!isAuthenticated) {
     return (
@@ -91,7 +106,7 @@ export default function ManageTasksPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter access password"
+                placeholder="Enter your password"
                 className="w-full px-4 py-3 border border-gray-200 dark:border-gray-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-950 dark:text-white text-sm"
                 autoFocus
               />
@@ -112,29 +127,12 @@ export default function ManageTasksPage() {
           </form>
 
           <div className="mt-6 text-center">
-            <Link 
+            <Link
               href="/"
               className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
             >
               ← Back to Home
             </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }           </div>
-            )}
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-lg"
-            >
-              Access Dashboard
-            </button>
-          </form>
-
-          <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            <p>Only authorized users can access this page</p>
           </div>
         </div>
       </div>
@@ -156,30 +154,11 @@ export default function ManageTasksPage() {
                 Create, edit, and manage tasks
               </p>
             </div>
-            
+
             <div className="flex items-center gap-4">
-              {/* User Switcher */}
-              <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
-                <button
-                  onClick={() => setCurrentUser('zen')}
-                  className={`px-5 py-2 rounded-md text-sm font-medium transition ${
-                    currentUser === 'zen'
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  Zen
-                </button>
-                <button
-                  onClick={() => setCurrentUser('lily')}
-                  className={`px-5 py-2 rounded-md text-sm font-medium transition ${
-                    currentUser === 'lily'
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  Lily
-                </button>
+              {/* Logged-in member (the password decides who you are) */}
+              <div className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-900 text-sm font-medium text-gray-900 dark:text-white">
+                {currentUser === 'zen' ? 'Zen' : 'Lily'}
               </div>
 
               {/* Dark Mode Toggle */}
@@ -188,6 +167,20 @@ export default function ManageTasksPage() {
                 className="p-2 rounded-lg bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition"
                 title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               >
+                {darkMode ? '☀️' : '🌙'}
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-[1600px]">
         <div className="space-y-8">
@@ -204,22 +197,20 @@ export default function ManageTasksPage() {
             </div>
 
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
-              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Zen's Tasks</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Zen&apos;s Tasks</div>
               <div className="text-3xl font-light text-gray-900 dark:text-white">
                 {tasks.filter(t => t.assignedTo?.includes(ZEN_ID) && !t.assignedTo?.includes(LILY_ID)).length}
               </div>
             </div>
 
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
-              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Lily's Tasks</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Lily&apos;s Tasks</div>
               <div className="text-3xl font-light text-gray-900 dark:text-white">
                 {tasks.filter(t => t.assignedTo?.includes(LILY_ID) && !t.assignedTo?.includes(ZEN_ID)).length}
               </div>
             </div>
-          </div>iv className="text-2xl font-bold text-gray-800 dark:text-white">
-              {tasks.length}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Active Tasks</div>
+          </div>
+
           {/* Task Manager */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-light text-gray-900 dark:text-white mb-6">
@@ -238,29 +229,8 @@ export default function ManageTasksPage() {
           {/* Today's Tasks */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-light text-gray-900 dark:text-white mb-6">
-              Today's Tasks - Mark Complete
-            </h2>k Manager */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6">
-            Manage Tasks
-          </h2>
-          <TaskManager
-            tasks={tasks}
-            currentUserId={getCurrentUserId()}
-            partnerUserId={getPartnerUserId()}
-            onTaskCreated={fetchTasks}
-            onTaskUpdated={fetchTasks}
-            onTaskDeleted={fetchTasks}
-          />
-        </div>
-
-        {/* Today's Tasks */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6">
-            Today's Tasks - Mark Complete
-          </h2>
-          <div className="space-y-4">
-            {loading ? (
+              Today&apos;s Tasks - Mark Complete
+            </h2>
             <div className="space-y-3">
               {loading ? (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading tasks...</div>
@@ -278,7 +248,7 @@ export default function ManageTasksPage() {
                   .map((task) => {
                     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                     let scheduleInfo = '';
-                    
+
                     if (task.type === 'daily' && task.schedule?.time) {
                       scheduleInfo = ` • ${task.schedule.time}`;
                     } else if (task.type === 'weekly' && task.schedule?.time && task.schedule?.days) {
@@ -322,7 +292,6 @@ export default function ManageTasksPage() {
                             taskId={task._id}
                             taskName={task.name}
                             userId={getCurrentUserId()}
-                            scheduledFor={new Date().toISOString().split('T')[0]}
                             onCompletionChanged={fetchTasks}
                           />
                         </div>
@@ -331,18 +300,20 @@ export default function ManageTasksPage() {
                   })
               )}
             </div>
+          </div>
+
           {/* Instructions */}
           <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
             <h3 className="font-medium text-gray-900 dark:text-white mb-3">
               Quick Tips
             </h3>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-              <li>• Blue border = Zen's tasks only</li>
-              <li>• Green border = Lily's tasks only</li>
+              <li>• Blue border = Zen&apos;s tasks only</li>
+              <li>• Green border = Lily&apos;s tasks only</li>
               <li>• Red border = Tasks for both</li>
-              <li>• Click the user switcher (Zen/Lily) to change perspective</li>
+              <li>• You can only mark your own tasks — log in with your own password</li>
               <li>• Tasks automatically sync to Google Calendar with colors</li>
-              <li>• Use Telegram bot for quick access: /addtask, /markdone</li>
+              <li>• Use Telegram bot for quick access: /today, /markdone, /week</li>
             </ul>
           </div>
         </div>

@@ -1,13 +1,15 @@
 const TelegramBot = require('node-telegram-bot-api');
 const config = require('./config');
 const connectDB = require('./database/connection');
-const { getOrCreateUser, recordCompletion, getUserStats, getLeaderboard } = require('./services/userService');
-const { createTask, getActiveTasks, deleteTask, updateTask, getTasksDueNow, parseTime, parseDays, parseCustomDays, isTaskPastDeadline, isTaskScheduledForDate } = require('./services/taskService');
-const { checkAndResetWeek, checkMissedConfirmations, handleWeekEnd } = require('./services/weeklyXpService');
+const { getOrCreateUser, ensureMembers, getUserStats, getLeaderboard } = require('./services/userService');
+const { createTask, getActiveTasks, deleteTask, updateTask, getTasksDueNow, parseTime, parseDays, parseCustomDays } = require('./services/taskService');
+const occurrences = require('./services/occurrenceService');
+const { Occurrence } = require('./database/models');
+const { TZ, todayKey, addDays, weekKeyOf, isDayOpen } = require('./utils/time');
 const cron = require('node-cron');
 
 // Connect to database
-connectDB();
+connectDB().then(ensureMembers).catch((err) => console.error('Startup error:', err));
 
 // Initialize bot
 const bot = new TelegramBot(config.telegram.token, { polling: true });
@@ -17,25 +19,43 @@ console.log('Bot started successfully!');
 // Store conversation states
 const conversationStates = {};
 
-// Helper function to create inline keyboard
-const createYesNoKeyboard = (taskId, taskName) => {
-  return {
-    inline_keyboard: [
-      [
-        { text: '✅ Yes', callback_data: `complete_${taskId}_yes` },
-        { text: '❌ No', callback_data: `complete_${taskId}_no` },
-      ],
-    ],
-  };
+const websiteUrl = config.webUrl;
+
+// Only the two members can use the bot. Everyone else gets one polite refusal.
+const refuse = (msg) => bot.sendMessage(msg.chat.id, '🔒 This is a private bot for its two members.');
+
+// Registers a member-only command; the regex is anchored so /start does not
+// also match /startfoo or a sentence that merely contains "/start".
+const command = (name, handler, { open = false } = {}) => {
+  bot.onText(new RegExp(`^/${name}(?:@\\w+)?(?:\\s|$)`), (msg, match) => {
+    if (!open && !config.isMember(msg.from.id)) return refuse(msg);
+    return handler(msg, match);
+  });
 };
 
-// Helper function to format user mention
-const mentionUser = (userId, username) => {
-  return `@${username}`;
+const dateToken = (dateKey) => dateKey.replace(/-/g, '');
+const tokenToDate = (t) => `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
+
+const STATUS_ICON = { done: '✅', missed: '❌', ignored: '👻', excused: '🙏', pending: '⏳', void: '▫️' };
+
+const occLabel = (o) => {
+  const counter = o.target > 1 ? ` ${o.progress}/${o.target}${o.unit ? ` ${o.unit}` : ''}` : '';
+  return `${STATUS_ICON[o.status] || ''} ${o.taskName}${counter}${o.time ? ` · ${o.time}` : ''}`;
+};
+
+// Buttons for answering one occurrence. Callback data stays under Telegram's
+// 64-byte limit: c|<taskId>|<userId>|<yyyymmdd>|<action>
+const answerKeyboard = (o) => {
+  const base = `c|${o.taskId}|${o.userId}|${dateToken(o.date)}`;
+  const row = o.target > 1
+    ? [{ text: '➕1', callback_data: `${base}|p` }, { text: '✅ All', callback_data: `${base}|y` }]
+    : [{ text: '✅ Done', callback_data: `${base}|y` }];
+  row.push({ text: '❌ No', callback_data: `${base}|n` });
+  return { inline_keyboard: [row, [{ text: '🙏 Excuse', callback_data: `${base}|e` }]] };
 };
 
 // Command: /start
-bot.onText(/\/start/, async (msg) => {
+command('start', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   const username = msg.from.username || msg.from.first_name;
@@ -49,6 +69,8 @@ bot.onText(/\/start/, async (msg) => {
 I'll help you and your partner stay productive and accountable!
 
 *Available Commands:*
+/today - Both of your days, with buttons
+/week - This week's scores and penalties
 /addtask - Create a new task
 /bulkadd - Add multiple tasks at once
 /edittask - Edit an existing task
@@ -67,7 +89,7 @@ Let's build great habits together! 💪
 });
 
 // Command: /stop
-bot.onText(/\/stop/, (msg) => {
+command('stop', (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
@@ -80,7 +102,7 @@ bot.onText(/\/stop/, (msg) => {
 });
 
 // Command: /help
-bot.onText(/\/help/, (msg) => {
+command('help', (msg) => {
   const chatId = msg.chat.id;
   
   const helpMessage = `
@@ -100,12 +122,17 @@ Use /bulkadd to add multiple tasks at once using a simple format.
 When it's time to complete a task, I'll ask both of you if you completed it. Reply with Yes or No.
 
 *Gamification Rules*
-• *XP System*: Start with 100 XP each week.
-• *Penalty*: Lose 10 XP for every missed task.
-• *Winner*: The person with the most XP at the end of the week (Monday) wins!
+• *XP System*: Start with ${config.rules.startXp} XP each week. XP only goes down.
+• *Said No*: -${config.rules.penalty.missed} XP (also a counter task short of its target)
+• *Ignored*: -${config.rules.penalty.ignored} XP — not answering costs more than an honest No
+• *Excuse*: 0 XP, ${config.rules.excusesPerWeek} per week
+• *Deadline*: a day stays open until 0${config.rules.closeHour}:00 the next morning
+• *Winner*: The person with the most XP when the week settles (Monday 0${config.rules.closeHour}:00) levels up!
 • *Loser*: The person with less XP must complete a *Penalty Task*.
 
 *Other Commands*
+• /today - See both of your days and answer open tasks
+• /week - Scores, penalties and excuses left this week
 • /addtask - Create a new task
 • /bulkadd - Add multiple tasks at once
 • /edittask - Edit an existing task (name, time, schedule, description, date)
@@ -117,7 +144,7 @@ When it's time to complete a task, I'll ask both of you if you completed it. Rep
 • /leaderboard - See who is winning this week
 
 *Website*
-[View Dashboard](https://aj-and-lis-task-tracker.vercel.app/)
+[View Dashboard](${websiteUrl})
 
 💡 _Tip: Use /markdone to complete tasks ahead of time!_
   `;
@@ -126,7 +153,7 @@ When it's time to complete a task, I'll ask both of you if you completed it. Rep
 });
 
 // Command: /getchatid - Helper to get the current chat ID
-bot.onText(/\/getchatid/, (msg) => {
+command('getchatid', (msg) => {
   const chatId = msg.chat.id;
   const chatType = msg.chat.type;
   
@@ -138,55 +165,80 @@ Chat Type: ${chatType}
 
 ${chatType === 'group' || chatType === 'supergroup' ? '✅ This is a group chat. Use this ID in your .env file as TELEGRAM_GROUP_CHAT_ID' : '⚠️ This is not a group chat.'}
   `, { parse_mode: 'Markdown' });
-});
+}, { open: true });
 
-// Command: /testweek (Debug command to force end of week)
-bot.onText(/\/testweek/, async (msg) => {
-  const chatId = msg.chat.id;
+// The weekly report message, shared by /week and the Monday settlement.
+const weekReportMessage = (result) => {
+  let message = '📅 *Weekly Report*\n';
+  message += '━━━━━━━━━━━━━━━━\n\n';
+
+  if (result.bothPerfect) {
+    message += `🌟 *AMAZING!* Both of you kept all ${config.rules.startXp} XP this week!\n`;
+    message += '💪 You both leveled up! Keep up the great work!\n';
+  } else if (result.isTie) {
+    message += '🤝 *It\'s a Tie!* Both of you have the same XP!\n';
+    message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
+    message += '💪 You both leveled up! Keep pushing each other!\n';
+  } else {
+    message += `🎉🏆 *WINNER: ${result.winner}* 🏆🎉\n`;
+    message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
+    message += `📉 *Runner-up: ${result.loser}*\n`;
+    message += `💀 Score: \`${result.loserXp}\` XP\n\n`;
+    message += `🚨 *PENALTY TASK* 🚨\n`;
+    message += `"${result.reward}"\n\n`;
+    message += '😈 _Better luck next week!_\n';
+  }
+
+  message += `\n_A new week starts at ${config.rules.startXp} XP._`;
+  return message;
+};
+
+// Command: /week — standings so far, every penalty, excuses left. Changes nothing.
+const showWeek = async (msg) => {
+  const week = weekKeyOf(todayKey());
+  let message = `📊 *This week* (from ${week})\n━━━━━━━━━━━━━━━━\n\n`;
+
+  for (const id of config.memberIds()) {
+    const xp = await occurrences.weeklyXp(id, week);
+    const left = await occurrences.excusesLeft(id, week);
+    const hits = await Occurrence.find({ userId: id, weekKey: week, penalty: { $gt: 0 } }).sort({ date: 1 }).lean();
+    message += `*${config.memberName(id)}* — ♥ \`${xp}\` / ${config.rules.startXp} · 🙏 ${left} excuses left\n`;
+    for (const h of hits) message += `  ${STATUS_ICON[h.status]} ${h.date.slice(5)} ${h.taskName} \`-${h.penalty}\`\n`;
+    message += '\n';
+  }
+
+  message += `_Settles Monday 0${config.rules.closeHour}:00._`;
+  bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
+};
+command('week', showWeek);
+command('testweek', showWeek);
+
+// Command: /today — both members' day, with buttons for your own open tasks.
+command('today', async (msg) => {
   const userId = msg.from.id.toString();
-  
-  try {
-    // Get user to pass to handleWeekEnd
-    const user = await getOrCreateUser(userId, msg.from.username);
-    const result = await handleWeekEnd(user);
-    
-    if (result) {
-      let message = '📅 *Weekly Report*\n';
-      message += '━━━━━━━━━━━━━━━━\n\n';
-      
-      if (result.bothPerfect) {
-        message += '🌟 *AMAZING!* Both of you maintained 100 XP this week!\n';
-        message += '💪 You both leveled up! Keep up the great work!\n';
-      } else if (result.isTie) {
-        message += '🤝 *It\'s a Tie!* Both of you have the same XP!\n';
-        message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
-        message += '💪 You both leveled up! Keep pushing each other!\n';
-      } else {
-        message += `🎉🏆 *WINNER: ${result.winner}* 🏆🎉\n`;
-        message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
-        
-        message += `📉 *Runner-up: ${result.loser}*\n`;
-        message += `💀 Score: \`${result.loserXp}\` XP\n\n`;
-        
-        message += `🚨 *PENALTY TASK* 🚨\n`;
-        message += `"${result.reward}"\n\n`;
-        message += '😈 _Better luck next week!_\n';
-      }
-      
-      message += '\n_Weekly XP has been reset to 100._';
-      
-      bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    } else {
-      bot.sendMessage(chatId, '❌ Could not generate weekly report. Make sure both users exist.');
-    }
-  } catch (error) {
-    console.error('Error in testweek:', error);
-    bot.sendMessage(chatId, '❌ Error running test week.');
+  const today = todayKey();
+  const yesterday = addDays(today, -1);
+  const members = await occurrences.dayView(today);
+
+  let message = `🗓 *Today* · ${today}\n━━━━━━━━━━━━━━━━\n`;
+  for (const m of members) {
+    message += `\n*${m.name}* — ${m.done}/${m.total}\n`;
+    message += m.items.length ? m.items.map((o) => `  ${occLabel(o)}`).join('\n') + '\n' : '  _Nothing scheduled_\n';
+  }
+  await bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
+
+  // Your own open items, yesterday's included while it is still open.
+  const mine = await Occurrence.find({
+    userId, status: 'pending', date: { $in: isDayOpen(yesterday) ? [yesterday, today] : [today] },
+  }).sort({ date: 1, time: 1 }).lean();
+  for (const o of mine) {
+    const when = o.date === today ? '' : ' (yesterday)';
+    await bot.sendMessage(msg.chat.id, `${occLabel(o)}${when}`, { reply_markup: answerKeyboard(o) });
   }
 });
 
 // Command: /addtask
-bot.onText(/\/addtask/, (msg) => {
+command('addtask', (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
@@ -196,7 +248,7 @@ bot.onText(/\/addtask/, (msg) => {
 });
 
 // Command: /bulkadd
-bot.onText(/\/bulkadd/, (msg) => {
+command('bulkadd', (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
@@ -238,7 +290,7 @@ Send multiple tasks (one per line), or type /stop to cancel.`;
 });
 
 // Command: /listtasks
-bot.onText(/\/listtasks/, async (msg) => {
+command('listtasks', async (msg) => {
   const chatId = msg.chat.id;
   
   try {
@@ -276,7 +328,7 @@ bot.onText(/\/listtasks/, async (msg) => {
 });
 
 // Command: /deletetask
-bot.onText(/\/deletetask/, async (msg) => {
+command('deletetask', async (msg) => {
   const chatId = msg.chat.id;
   
   try {
@@ -304,50 +356,29 @@ bot.onText(/\/deletetask/, async (msg) => {
 });
 
 // Command: /markdone
-bot.onText(/\/markdone/, async (msg) => {
+command('markdone', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
   try {
-    const tasks = await getActiveTasks();
+    const today = todayKey();
+    const yesterday = addDays(today, -1);
+    await occurrences.ensureDay(today);
+    const open = await Occurrence.find({
+      userId, status: 'pending', date: { $in: isDayOpen(yesterday) ? [yesterday, today] : [today] },
+    }).sort({ date: 1, time: 1 }).lean();
     
-    if (tasks.length === 0) {
-      bot.sendMessage(chatId, '📋 No tasks available to mark as done!');
+    if (open.length === 0) {
+      bot.sendMessage(chatId, '🎉 Nothing open for you right now!');
       return;
     }
     
-    // Filter tasks assigned to this user
-    const userTasks = tasks.filter(task => 
-      task.assignedTo.includes(userId)
-    );
+    const keyboard = open.map((o) => [{
+      text: `${o.taskName}${o.time ? ` (${o.time})` : ''}${o.date === today ? '' : ' · yesterday'}`,
+      callback_data: `c|${o.taskId}|${o.userId}|${dateToken(o.date)}|y`,
+    }]);
     
-    if (userTasks.length === 0) {
-      bot.sendMessage(chatId, '📋 No tasks assigned to you!');
-      return;
-    }
-    
-    let message = '✅ *Mark Task as Done*\n\n';
-    message += 'Select a task to mark as completed:\n\n';
-    
-    const keyboard = userTasks.map(task => {
-      let scheduleInfo = '';
-      if (task.type === 'daily' && task.schedule?.time) {
-        scheduleInfo = ` (${task.schedule.time})`;
-      } else if (task.type === 'weekly' && task.schedule?.time) {
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const days = task.schedule.days?.map(d => dayNames[d]).join(', ') || '';
-        scheduleInfo = ` (${days} at ${task.schedule.time})`;
-      } else if (task.type === 'one-time' && task.schedule?.date) {
-        scheduleInfo = ` (${task.schedule.date.toISOString().split('T')[0]})`;
-      }
-      
-      return [{
-        text: `${task.name}${scheduleInfo}`,
-        callback_data: `markdone_${task._id}`
-      }];
-    });
-    
-    bot.sendMessage(chatId, message, {
+    bot.sendMessage(chatId, '✅ *Mark Task as Done*\n\nSelect a task to mark as completed:', {
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: keyboard }
     });
@@ -358,7 +389,7 @@ bot.onText(/\/markdone/, async (msg) => {
 });
 
 // Command: /edittask
-bot.onText(/\/edittask/, async (msg) => {
+command('edittask', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
@@ -395,7 +426,7 @@ bot.onText(/\/edittask/, async (msg) => {
 });
 
 // Command: /mystats
-bot.onText(/\/mystats/, async (msg) => {
+command('mystats', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
   
@@ -411,9 +442,12 @@ bot.onText(/\/mystats/, async (msg) => {
     message += `━━━━━━━━━━━━━━━━\n\n`;
     
     message += `⭐ *Level ${stats.level}*\n`;
-    message += `Total XP: \`${stats.xp}\`\n`;
-    message += `Weekly XP: \`${stats.weeklyXp}\` / \`100\`\n`;
+    message += `Weekly XP: \`${stats.weeklyXp}\` / \`${config.rules.startXp}\`\n`;
+    message += `Excuses left: \`${stats.excusesLeft}\`\n`;
     message += `Tasks Done: \`${stats.totalTasksCompleted}\`\n\n`;
+    if (stats.pendingRewards.length) {
+      message += `🚨 *Penalty tasks owed*\n${stats.pendingRewards.map((r) => `• ${r}`).join('\n')}\n\n`;
+    }
     
     if (Object.keys(stats.activeStreaks).length > 0) {
       message += `🔥 *Active Streaks*\n`;
@@ -432,7 +466,7 @@ bot.onText(/\/mystats/, async (msg) => {
 });
 
 // Command: /leaderboard
-bot.onText(/\/leaderboard/, async (msg) => {
+command('leaderboard', async (msg) => {
   const chatId = msg.chat.id;
   
   try {
@@ -451,7 +485,7 @@ bot.onText(/\/leaderboard/, async (msg) => {
     leaderboard.forEach((user, index) => {
       const medal = medals[index] || '▪️';
       message += `${medal} *${user.username}*\n`;
-      message += `   Weekly: \`${user.weeklyXp}\` / \`100\` XP\n`;
+      message += `   Weekly: \`${user.weeklyXp}\` / \`${config.rules.startXp}\` XP\n`;
       message += `   Level: \`${user.level}\`\n\n`;
     });
     
@@ -981,64 +1015,16 @@ bot.on('callback_query', async (query) => {
   const userId = query.from.id.toString();
   const username = query.from.username || query.from.first_name;
   
-  // Handle markdone callbacks
-  if (data.startsWith('markdone_')) {
-    const taskId = data.replace('markdone_', '');
-    
-    try {
-      const { Task } = require('./database/models');
-      const task = await Task.findById(taskId);
-      
-      if (!task) {
-        bot.answerCallbackQuery(query.id, {
-          text: '❌ Task not found!',
-          show_alert: true
-        });
-        return;
-      }
-      
-      // Check if task is past deadline
-      if (isTaskPastDeadline(task)) {
-        bot.answerCallbackQuery(query.id, {
-          text: '⏰ Time has passed for this task. You can only mark tasks as done on their scheduled day!',
-          show_alert: true
-        });
-        
-        bot.editMessageText('❌ This task is past its deadline and cannot be marked as done.', {
-          chat_id: chatId,
-          message_id: query.message.message_id
-        });
-        return;
-      }
-      
-      await getOrCreateUser(userId, username);
-      const result = await recordCompletion(taskId, userId, true, true); // Pass true for advance completion
-      
-      bot.editMessageText('✓ Task marked as done!', {
-        chat_id: chatId,
-        message_id: query.message.message_id
-      });
-      
-      let responseMessage = `✅ <b>Task Completed in Advance</b>\n`;
-      responseMessage += `━━━━━━━━━━━━━━━━\n`;
-      responseMessage += `Task: <b>${result.taskName || 'Task'}</b>\n`;
-      responseMessage += `User: <b>${username}</b>\n\n`;
-      
-      responseMessage += `<b>Status</b>\n`;
-      responseMessage += `✓ Marked as completed!\n`;
-      
-      if (result.streakCount > 1) {
-        responseMessage += `Streak: <code>${result.streakCount}</code> days 🔥\n`;
-      }
-      
-      responseMessage += `\n<i>Great job being proactive! You won\'t be asked for confirmation.</i> 💪`;
-      
-      bot.sendMessage(chatId, responseMessage, { parse_mode: 'HTML' });
-      bot.answerCallbackQuery(query.id);
-    } catch (error) {
-      console.error('Error marking task done:', error);
-      bot.answerCallbackQuery(query.id, { text: 'Error marking task as done' });
-    }
+  if (!config.isMember(userId)) {
+    bot.answerCallbackQuery(query.id, { text: '🔒 Private bot', show_alert: true });
+    return;
+  }
+
+  // Answer buttons: c|<taskId>|<userId>|<yyyymmdd>|<y|n|e|p>, plus the formats
+  // used by buttons sent before this version (markdone_<taskId>, complete_…).
+  const answer = parseAnswer(data, query);
+  if (answer) {
+    await handleAnswer(query, answer);
     return;
   }
   
@@ -1115,25 +1101,25 @@ bot.on('callback_query', async (query) => {
         state.taskData.assignedTo
       );
       
-      let confirmMessage = `✅ *Task Created*\\n`;
-      confirmMessage += `━━━━━━━━━━━━━━━━\\n`;
-      confirmMessage += `*${task.name}*\\n`;
-      if (task.description) confirmMessage += `_${task.description}_\\n`;
-      confirmMessage += `Type: \`${task.type}\`\\n`;
-      confirmMessage += `Assigned: \`${state.taskData.assignedTo.length === 2 ? 'Both' : (state.taskData.assignedTo[0] === config.users.user1.id ? config.users.user1.name : config.users.user2.name)}\`\\n\\n`;
+      let confirmMessage = `✅ *Task Created*\n`;
+      confirmMessage += `━━━━━━━━━━━━━━━━\n`;
+      confirmMessage += `*${task.name}*\n`;
+      if (task.description) confirmMessage += `_${task.description}_\n`;
+      confirmMessage += `Type: \`${task.type}\`\n`;
+      confirmMessage += `Assigned: \`${state.taskData.assignedTo.length === 2 ? 'Both' : (state.taskData.assignedTo[0] === config.users.user1.id ? config.users.user1.name : config.users.user2.name)}\`\n\n`;
       confirmMessage += `[View Dashboard](${websiteUrl})`;
       
       bot.sendMessage(chatId, confirmMessage, { parse_mode: 'Markdown' });
       delete conversationStates[userId];
     } else if (taskType === 'one-time') {
       state.step = 'task_date';
-      bot.sendMessage(chatId, '📆 What date? (format: YYYY-MM-DD)\\n\\nExample: \"2025-12-25\"');
+      bot.sendMessage(chatId, '📆 What date? (format: YYYY-MM-DD)\n\nExample: \"2025-12-25\"');
     } else if (taskType === 'custom') {
       state.step = 'task_custom_days';
       bot.sendMessage(chatId, '📅 Which days? Type day abbreviations separated by commas.\n\nExamples:\n• "M,W,F" for Mon, Wed, Fri\n• "M,T,Th" for Mon, Tue, Thu\n\nDay codes: M=Mon, T=Tue, W=Wed, Th=Thu, F=Fri, S=Sat, Su=Sun');
     } else {
       state.step = 'task_time';
-      bot.sendMessage(chatId, '⏰ What time should this task be checked?\\n\\nExample: \"7:00\" or \"14:30\"');
+      bot.sendMessage(chatId, '⏰ What time should this task be checked?\n\nExample: \"7:00\" or \"14:30\"');
     }
     
     bot.answerCallbackQuery(query.id);
@@ -1201,213 +1187,155 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  // Handle task completion buttons
-  const match = data.match(/^complete_(.+)_(.+)_(yes|no)$/);
-  if (!match) return;
-  
-  const taskId = match[1];
-  const assignedUserId = match[2];
-  const completed = match[3] === 'yes';
-  
-  // Check if the person pressing the button is the assigned user
-  if (userId !== assignedUserId) {
-    bot.answerCallbackQuery(query.id, {
-      text: '❌ This button is not for you!',
-      show_alert: true
-    });
+});
+
+const ACTIONS = { y: 'done', n: 'missed', e: 'excused', p: 'progress' };
+
+function parseAnswer(data, query) {
+  // Buttons sent before dates were embedded: use the day the message was sent.
+  const messageDay = () => todayKey(new Date((query.message?.date || Date.now() / 1000) * 1000));
+
+  let m = data.match(/^c\|([a-f0-9]{24})\|(\d+)\|(\d{8})\|([ynep])$/);
+  if (m) return { taskId: m[1], ownerId: m[2], date: tokenToDate(m[3]), action: ACTIONS[m[4]] };
+
+  m = data.match(/^complete_([a-f0-9]{24})_(\d+)_(yes|no)$/);
+  if (m) return { taskId: m[1], ownerId: m[2], date: messageDay(), action: m[3] === 'yes' ? 'done' : 'missed' };
+
+  m = data.match(/^markdone_([a-f0-9]{24})$/);
+  if (m) return { taskId: m[1], ownerId: query.from.id.toString(), date: messageDay(), action: 'done' };
+
+  return null;
+}
+
+async function handleAnswer(query, { taskId, ownerId, date, action }) {
+  const chatId = query.message.chat.id;
+  const userId = query.from.id.toString();
+  const username = query.from.username || query.from.first_name;
+
+  if (userId !== ownerId) {
+    bot.answerCallbackQuery(query.id, { text: '❌ This button is not for you!', show_alert: true });
     return;
   }
-  
-  // Check if task is past deadline
-  try {
-    const { Task } = require('./database/models');
-    const task = await Task.findById(taskId);
-    
-    if (task && isTaskPastDeadline(task)) {
-      bot.answerCallbackQuery(query.id, {
-        text: '⏰ Time has passed for this task. Confirmation is no longer valid!',
-        show_alert: true
-      });
-      
-      // Remove the buttons
-      bot.editMessageReplyMarkup(
-        { inline_keyboard: [] },
-        { chat_id: chatId, message_id: query.message.message_id }
-      );
-      
-      return;
-    }
-  } catch (error) {
-    console.error('Error checking task deadline:', error);
-  }
-  
+
+  let result;
   try {
     await getOrCreateUser(userId, username);
-    const result = await recordCompletion(taskId, userId, completed);
-    
-    let responseMessage = '';
-    const websiteUrl = 'http://localhost:3000';
-    
-    if (completed) {
-      responseMessage = `✅ <b>Task Completed</b>\n`;
-      responseMessage += `━━━━━━━━━━━━━━━━\n`;
-      responseMessage += `Task: <b>${result.taskName || 'Task'}</b>\n`;
-      responseMessage += `User: <b>${username}</b>\n\n`;
-      
-      responseMessage += `<b>Status</b>\n`;
-      responseMessage += `✓ Completed Successfully!\n`;
-      
-      if (result.streakCount > 1) {
-        responseMessage += `Streak: <code>${result.streakCount}</code> days 🔥\n`;
-      }
-      
-      responseMessage += `\n<i>Keep up the great work! Weekly XP preserved.</i> 💪\n`;
-    } else {
-      responseMessage = `❌ <b>Task Missed</b>\n`;
-      responseMessage += `━━━━━━━━━━━━━━━━\n`;
-      responseMessage += `Task: <b>${result.taskName || 'Task'}</b>\n`;
-      responseMessage += `User: <b>${username}</b>\n\n`;
-      
-      responseMessage += `<b>Penalty</b>\n`;
-      responseMessage += `Weekly XP: <code>-10</code> 📉\n`;
-      responseMessage += `<i>Keep trying!</i> 💪\n`;
-    }
-    
-    responseMessage += `\n<a href="${websiteUrl}">View Dashboard</a>`;
-    
-    // Remove the buttons after response
-    bot.answerCallbackQuery(query.id);
-    bot.editMessageReplyMarkup(
-      { inline_keyboard: [] },
-      { chat_id: chatId, message_id: query.message.message_id }
-    );
-    bot.sendMessage(chatId, responseMessage, { parse_mode: 'HTML' });
+    result = await occurrences.mark({ taskId, userId, date, action, source: 'bot' });
   } catch (error) {
-    console.error('Error recording completion:', error);
-    bot.answerCallbackQuery(query.id, { text: 'Error recording completion' });
+    if (!error.status) console.error('Error recording answer:', error);
+    bot.answerCallbackQuery(query.id, { text: error.status ? `⏰ ${error.message}` : 'Error recording answer', show_alert: true });
+    if (error.status === 409) {
+      bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }).catch(() => {});
+    }
+    return;
   }
-});
 
-// Schedule task checks every minute
+  const o = result.occurrence;
+  const stillOpen = o.status === 'pending';
+
+  // A counter that is not finished yet keeps its buttons and shows progress.
+  if (stillOpen) {
+    bot.answerCallbackQuery(query.id, { text: `${o.progress}/${o.target} ${o.unit || ''}`.trim() });
+    bot.editMessageText(`${occLabel(o)}`, {
+      chat_id: chatId, message_id: query.message.message_id, reply_markup: answerKeyboard(o),
+    }).catch(() => {});
+    return;
+  }
+
+  bot.answerCallbackQuery(query.id);
+  bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }).catch(() => {});
+
+  const week = o.weekKey;
+  const [xp, streaks, excuses] = await Promise.all([
+    occurrences.weeklyXp(userId, week),
+    occurrences.streaksFor(userId),
+    occurrences.excusesLeft(userId, week),
+  ]);
+  const streak = streaks[String(taskId)] || 0;
+  const pooled = o.mode === 'pooled' ? '\n<i>Shared task — counts for both of you.</i>' : '';
+  const dayNote = o.date === todayKey() ? '' : ` <i>(${o.date})</i>`;
+
+  let responseMessage;
+  if (o.status === 'done') {
+    responseMessage = `✅ <b>${o.taskName}</b>${dayNote}\n${username} did it${o.advance ? ' early' : ''}!`;
+    if (streak > 1) responseMessage += `\nStreak: <code>${streak}</code> 🔥`;
+    responseMessage += `\nWeekly XP: <code>${xp}</code>`;
+  } else if (o.status === 'missed') {
+    responseMessage = `❌ <b>${o.taskName}</b>${dayNote}\n${username}: not done.\nWeekly XP: <code>-${o.penalty}</code> → <code>${xp}</code> 📉`;
+  } else if (o.status === 'excused') {
+    responseMessage = `🙏 <b>${o.taskName}</b>${dayNote}\n${username} used an excuse (${excuses} left this week). No XP lost.`;
+  }
+  responseMessage += pooled;
+  responseMessage += `\n<a href="${websiteUrl}">View Dashboard</a>`;
+
+  bot.sendMessage(chatId, responseMessage, { parse_mode: 'HTML', disable_web_page_preview: true });
+}
+
+// ==================== SCHEDULER ====================
+// One tick a minute, in order: make sure today's occurrences exist, close any
+// day past its deadline (catching up after downtime), settle finished weeks,
+// then send this minute's reminders. Closing always runs before settling, so
+// Sunday's misses always land in Sunday's week.
+
+let lastEnsuredDay = null;
+let ticking = false;
+
+async function sendReminders(now) {
+  const today = todayKey(now);
+  const tasks = await getTasksDueNow(now);
+  for (const task of tasks) {
+    const rows = await Occurrence.find({ taskId: task._id, date: today }).lean();
+    for (const o of rows) {
+      if (o.status !== 'pending') continue; // done early, excused, or voided
+      const progress = o.target > 1 ? ` (${o.progress}/${o.target}${o.unit ? ` ${o.unit}` : ''})` : '';
+      const text = `⏰ Time for: ${o.taskName}${progress}\n\nHey ${config.memberName(o.userId)}, did you do it?`;
+      await bot.sendMessage(config.telegram.groupChatId, text, { reply_markup: answerKeyboard(o) });
+    }
+  }
+}
+
+async function announceClosed(closed) {
+  const byDay = {};
+  for (const o of closed) ((byDay[o.date] ||= {})[o.userId] ||= []).push(o);
+
+  for (const [date, people] of Object.entries(byDay)) {
+    let message = `🌅 *${date} is closed*\n━━━━━━━━━━━━━━━━\n`;
+    for (const [userId, items] of Object.entries(people)) {
+      const lost = items.reduce((sum, o) => sum + o.penalty, 0);
+      message += `\n*${config.memberName(userId)}* \`-${lost}\` XP\n`;
+      message += items.map((o) => `  ${STATUS_ICON[o.status]} ${o.taskName} \`-${o.penalty}\``).join('\n') + '\n';
+    }
+    message += `\n_${STATUS_ICON.ignored} ignored = -${config.rules.penalty.ignored}, ${STATUS_ICON.missed} short of target = -${config.rules.penalty.missed}_`;
+    await bot.sendMessage(config.telegram.groupChatId, message, { parse_mode: 'Markdown' });
+  }
+}
+
 cron.schedule('* * * * *', async () => {
+  if (ticking) return; // a slow tick never overlaps the next one
+  ticking = true;
+  const now = new Date();
   try {
-    // Get Ethiopia time (UTC+3)
-    const now = new Date();
-    const offset = config.timezone?.offset || 0;
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const localNow = new Date(utc + (3600000 * offset));
-    
-    const currentTime = `${localNow.getHours().toString().padStart(2, '0')}:${localNow.getMinutes().toString().padStart(2, '0')}`;
-    console.log(`⏰ Checking tasks for time: ${currentTime} (Ethiopia Time, UTC+3)`);
-
-    const tasks = await getTasksDueNow();
-    const websiteUrl = 'https://aj-and-lis-task-tracker.vercel.app/';
-    const { Completion } = require('./database/models');
-    
-    for (const task of tasks) {
-      // Send individual confirmation message for each assigned user
-      const assignedUsers = task.assignedTo || [task.createdBy];
-      
-      for (const assignedUserId of assignedUsers) {
-        // Check if user already completed this task in advance today
-        const today = new Date(localNow);
-        today.setHours(0, 0, 0, 0);
-        
-        const alreadyCompleted = await Completion.findOne({
-          taskId: task._id,
-          userId: assignedUserId,
-          completedAt: { $gte: today },
-          completed: true,
-          advanceCompletion: true
-        });
-        
-        if (alreadyCompleted) {
-          console.log(`⏭️ Skipping confirmation for ${assignedUserId} - already completed in advance`);
-          continue;
-        }
-        
-        const userName = assignedUserId === config.users.user1.id ? config.users.user1.name : config.users.user2.name;
-        const fullMessage = `⏰ Time for: ${task.name}\n\nHey ${userName}, did you complete this task?\n\n[View Dashboard](${websiteUrl})`;
-        
-        // Create user-specific keyboard with userId embedded
-        const keyboard = {
-          inline_keyboard: [
-            [
-              { text: '✅ Yes', callback_data: `complete_${task._id}_${assignedUserId}_yes` },
-              { text: '❌ No', callback_data: `complete_${task._id}_${assignedUserId}_no` },
-            ],
-          ],
-        };
-        
-        bot.sendMessage(
-          config.telegram.groupChatId,
-          fullMessage,
-          {
-            reply_markup: keyboard,
-          }
-        );
-      }
+    const today = todayKey(now);
+    if (lastEnsuredDay !== today) {
+      await occurrences.ensureDay(today, now);
+      await Promise.all(config.memberIds().map((id) => occurrences.refreshUserCaches(id, now)));
+      lastEnsuredDay = today;
     }
-  } catch (error) {
-    console.error('Error in scheduled task check:', error);
-  }
-});
 
-// Check for missed confirmations once per day at 6 AM (Ethiopia time)
-cron.schedule('* * * * *', async () => {
-  try {
-    // Get Ethiopia time (UTC+3)
-    const now = new Date();
-    const offset = config.timezone?.offset || 0;
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const localNow = new Date(utc + (3600000 * offset));
-    
-    // Only run at 6 AM Ethiopia time (06:00)
-    if (localNow.getHours() === 6 && localNow.getMinutes() === 0) {
-      console.log('🔍 Checking for missed confirmations (6 AM Ethiopia time)...');
-      await checkMissedConfirmations();
-    }
-  } catch (error) {
-    console.error('Error checking missed confirmations:', error);
-  }
-});
+    const closed = await occurrences.closeDueDays(now);
+    if (closed.length) await announceClosed(closed);
 
-// Check for week reset every minute (checks for Monday 06:00 Ethiopia time)
-cron.schedule('* * * * *', async () => {
-  try {
-    const result = await checkAndResetWeek();
-    
-    if (result) {
-      let message = '📅 *Weekly Report*\n';
-      message += '━━━━━━━━━━━━━━━━\n\n';
-      
-      if (result.bothPerfect) {
-        message += '🌟 *AMAZING!* Both of you maintained 100 XP this week!\n';
-        message += '💪 You both leveled up! Keep up the great work!\n';
-      } else if (result.isTie) {
-        message += '🤝 *It\'s a Tie!* Both of you have the same XP!\n';
-        message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
-        message += '💪 You both leveled up! Keep pushing each other!\n';
-      } else {
-        message += `🎉🏆 *WINNER: ${result.winner}* 🏆🎉\n`;
-        message += `🔥 Score: \`${result.winnerXp}\` XP\n\n`;
-        
-        message += `📉 *Runner-up: ${result.loser}*\n`;
-        message += `💀 Score: \`${result.loserXp}\` XP\n\n`;
-        
-        message += `🚨 *PENALTY TASK* 🚨\n`;
-        message += `"${result.reward}"\n\n`;
-        message += '😈 _Better luck next week!_\n';
-      }
-      
-      message += '\n_Weekly XP has been reset to 100._';
-      
-      bot.sendMessage(config.telegram.groupChatId, message, { parse_mode: 'Markdown' });
+    for (const result of await occurrences.settleWeeks(now)) {
+      await bot.sendMessage(config.telegram.groupChatId, weekReportMessage(result), { parse_mode: 'Markdown' });
     }
+
+    await sendReminders(now);
   } catch (error) {
-    console.error('Error checking week reset:', error);
+    console.error('Scheduler tick failed:', error);
+  } finally {
+    ticking = false;
   }
-});
+}, { timezone: TZ });
 
 // Handle errors
 bot.on('polling_error', (error) => {

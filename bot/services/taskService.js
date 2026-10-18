@@ -1,16 +1,11 @@
 const { Task } = require('../database/models');
-const config = require('../config');
-
-// Helper to get current time in configured timezone
-const getLocalTime = () => {
-  const now = new Date();
-  const offset = config.timezone?.offset || 0;
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  return new Date(utc + (3600000 * offset));
-};
+const { localParts, normalizeTime } = require('../utils/time');
+const { isScheduledOn } = require('./schedule');
+const occurrences = require('./occurrenceService');
 
 // Create a new task
-const createTask = async (name, description, type, schedule, createdBy, xpReward = 10, assignedTo = []) => {
+const createTask = async (name, description, type, schedule, createdBy, xpReward = 10, assignedTo = [], extra = {}) => {
+  if (schedule?.time) schedule = { ...schedule, time: normalizeTime(schedule.time) };
   const task = new Task({
     name,
     description,
@@ -20,9 +15,11 @@ const createTask = async (name, description, type, schedule, createdBy, xpReward
     createdBy,
     assignedTo: assignedTo.length > 0 ? assignedTo : [createdBy], // default to creator
     active: true,
+    ...pickExtra(extra),
   });
   
   await task.save();
+  await occurrences.resyncTask(task);
   
   // Sync to Google Calendar
   try {
@@ -43,6 +40,18 @@ const createTask = async (name, description, type, schedule, createdBy, xpReward
   return task;
 };
 
+// Optional fields shared by every create/update path.
+const pickExtra = (src = {}) => {
+  const out = {};
+  if (src.target !== undefined) out.target = Math.max(1, parseInt(src.target, 10) || 1);
+  if (src.unit !== undefined) out.unit = String(src.unit);
+  if (src.mode !== undefined && ['each', 'pooled'].includes(src.mode)) out.mode = src.mode;
+  if (src.area !== undefined) out.area = String(src.area);
+  if (src.item !== undefined) out.item = String(src.item);
+  if (src.startDate !== undefined) out.startDate = src.startDate || undefined;
+  return out;
+};
+
 // Get all active tasks
 const getActiveTasks = async () => {
   return await Task.find({ active: true }).sort({ createdAt: -1 });
@@ -59,7 +68,8 @@ const deleteTask = async (taskId) => {
   if (task) {
     task.active = false;
     await task.save();
-    return true;
+    await occurrences.resyncTask(task); // voids today's and future pending occurrences
+    return task;
   }
   return false;
 };
@@ -73,61 +83,23 @@ const updateTask = async (taskId, updates) => {
   if (updates.name) task.name = updates.name;
   if (updates.description !== undefined) task.description = updates.description;
   if (updates.schedule) {
-    task.schedule = { ...task.schedule, ...updates.schedule };
+    task.schedule = { ...(task.schedule?.toObject?.() || task.schedule), ...updates.schedule };
+    if (task.schedule.time) task.schedule.time = normalizeTime(task.schedule.time);
     task.markModified('schedule');
   }
+  if (updates.assignedTo) task.assignedTo = updates.assignedTo;
+  Object.assign(task, pickExtra(updates));
   
   await task.save();
+  await occurrences.resyncTask(task);
   return task;
 };
 
-// Get tasks that should be checked now
-const getTasksDueNow = async () => {
-  const localNow = getLocalTime();
-  const currentHour = localNow.getHours().toString().padStart(2, '0');
-  const currentMinute = localNow.getMinutes().toString().padStart(2, '0');
-  const currentTime = `${currentHour}:${currentMinute}`;
-  const currentDay = localNow.getDay();
-  
-  // Get all active tasks
-  const allTasks = await Task.find({ active: true });
-  const dueTasks = [];
-  
-  for (const task of allTasks) {
-    let isDue = false;
-    
-    if (task.type === 'daily' && task.schedule?.time === currentTime) {
-      isDue = true;
-    } else if (task.type === 'weekly' && task.schedule?.time === currentTime && task.schedule?.days?.includes(currentDay)) {
-      isDue = true;
-    } else if (task.type === 'custom' && task.schedule?.time === currentTime && task.schedule?.days?.includes(currentDay)) {
-      isDue = true;
-    } else if (task.type === 'one-time' && task.schedule?.time === currentTime && task.schedule?.date) {
-      // Check if the one-time task date matches today (compare date strings to avoid timezone issues)
-      const taskDate = new Date(task.schedule.date);
-      const taskDateStr = `${taskDate.getFullYear()}-${(taskDate.getMonth() + 1).toString().padStart(2, '0')}-${taskDate.getDate().toString().padStart(2, '0')}`;
-      const nowDateStr = `${localNow.getFullYear()}-${(localNow.getMonth() + 1).toString().padStart(2, '0')}-${localNow.getDate().toString().padStart(2, '0')}`;
-      
-      console.log(`🔍 One-time task check: ${task.name}`);
-      console.log(`   Task date string: ${taskDateStr}`);
-      console.log(`   Current date string: ${nowDateStr}`);
-      console.log(`   Task time: ${task.schedule.time}, Current time: ${currentTime}`);
-      console.log(`   Dates match: ${taskDateStr === nowDateStr}`);
-      
-      if (taskDateStr === nowDateStr) {
-        isDue = true;
-        console.log(`   ✅ Task IS due now!`);
-      } else {
-        console.log(`   ❌ Task NOT due (date mismatch)`);
-      }
-    }
-    
-    if (isDue) {
-      dueTasks.push(task);
-    }
-  }
-  
-  return dueTasks;
+// Active tasks whose reminder time is this minute (local time) today.
+const getTasksDueNow = async (now = new Date()) => {
+  const { dateKey, time } = localParts(now);
+  const tasks = await Task.find({ active: true, 'schedule.time': { $exists: true } });
+  return tasks.filter((task) => normalizeTime(task.schedule.time) === time && isScheduledOn(task, dateKey));
 };
 
 // Parse time string (e.g., "7:00", "14:30")
@@ -202,89 +174,6 @@ const parseCustomDays = (daysStr) => {
   return result.length > 0 ? result : null;
 };
 
-// Check if a task was scheduled for a specific date
-const isTaskScheduledForDate = (task, targetDate) => {
-  const dayOfWeek = targetDate.getDay();
-  
-  if (task.type === 'daily') {
-    return true;
-  }
-  
-  if (task.type === 'weekly' || task.type === 'custom') {
-    return task.schedule.days && task.schedule.days.includes(dayOfWeek);
-  }
-  
-  if (task.type === 'one-time' && task.schedule?.date) {
-    const taskDate = new Date(task.schedule.date);
-    const taskDateStr = `${taskDate.getFullYear()}-${(taskDate.getMonth() + 1).toString().padStart(2, '0')}-${taskDate.getDate().toString().padStart(2, '0')}`;
-    const targetDateStr = `${targetDate.getFullYear()}-${(targetDate.getMonth() + 1).toString().padStart(2, '0')}-${targetDate.getDate().toString().padStart(2, '0')}`;
-    return taskDateStr === targetDateStr;
-  }
-  
-  // Flexible tasks can be done anytime
-  if (task.type === 'flexible') {
-    return true;
-  }
-  
-  return false;
-};
-
-// Check if it's too late to mark a task as done or confirm it
-const isTaskPastDeadline = (task) => {
-  // Flexible tasks never expire
-  if (task.type === 'flexible') {
-    return false;
-  }
-  
-  // Tasks without schedule time are flexible-like
-  if (!task.schedule || !task.schedule.time) {
-    return false;
-  }
-  
-  const localNow = getLocalTime();
-  const today = new Date(localNow);
-  today.setHours(0, 0, 0, 0);
-  
-  // Check if task was scheduled for today
-  const scheduledToday = isTaskScheduledForDate(task, today);
-  
-  if (!scheduledToday) {
-    // Task is not scheduled for today, check if it was scheduled for yesterday or earlier
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // For one-time tasks, check if the task date has passed
-    if (task.type === 'one-time' && task.schedule?.date) {
-      const taskDate = new Date(task.schedule.date);
-      taskDate.setHours(0, 0, 0, 0);
-      
-      // If task date is before today, it's past deadline
-      if (taskDate < today) {
-        return true;
-      }
-      
-      // If task date is in the future, it's not past deadline
-      return false;
-    }
-    
-    // For recurring tasks (daily, weekly, custom), if not scheduled today
-    // we need to check if it was scheduled yesterday or earlier and that day has passed
-    // Allow marking done up until the scheduled day ends (midnight next day)
-    const wasScheduledYesterday = isTaskScheduledForDate(task, yesterday);
-    
-    if (wasScheduledYesterday) {
-      // Yesterday's tasks are past deadline
-      return true;
-    }
-    
-    // Not scheduled today or yesterday, so can't be done now
-    return true;
-  }
-  
-  // Task is scheduled for today - it's valid to mark done or confirm
-  return false;
-};
-
 module.exports = {
   createTask,
   getActiveTasks,
@@ -295,6 +184,4 @@ module.exports = {
   parseTime,
   parseDays,
   parseCustomDays,
-  isTaskScheduledForDate,
-  isTaskPastDeadline,
 };

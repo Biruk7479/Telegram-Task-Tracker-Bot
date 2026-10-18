@@ -75,7 +75,8 @@ export default function Calendar({ userId, username }: CalendarProps) {
     
     // Check task completion status
     const totalTasks = dayData.scheduledTasks.length;
-    const completedTasks = dayData.scheduledTasks.filter(t => t.completed === true).length;
+    // An excused task is neither done nor a miss; it counts toward a clean day.
+    const completedTasks = dayData.scheduledTasks.filter(t => t.completed === true || t.status === 'excused').length;
     const pendingTasks = dayData.scheduledTasks.filter(t => t.completed === null).length;
     const incompleteTasks = dayData.scheduledTasks.filter(t => t.completed === false).length;
     

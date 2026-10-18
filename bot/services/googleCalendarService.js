@@ -199,30 +199,56 @@ async function deleteCalendarEvent(eventId, userId) {
   }
 }
 
-/**
- * Mark a calendar event as completed (add checkmark to title)
- * @param {string} eventId - The Google Calendar event ID
- * @param {string} userId - User ID for OAuth
- * @param {string} taskName - Original task name
- * @returns {Promise<boolean>} Success status
- */
-async function markEventCompleted(eventId, userId, taskName) {
-  return await updateCalendarEvent(eventId, userId, {
-    summary: `✅ ${taskName}`,
-  });
-}
+const STATUS_ICON = {
+  done: '✅', missed: '❌', ignored: '❌', excused: '🙏', pending: '⏳',
+};
 
 /**
- * Mark a calendar event as missed (add cross to title)
- * @param {string} eventId - The Google Calendar event ID
- * @param {string} userId - User ID for OAuth
- * @param {string} taskName - Original task name
+ * Reflect one day's results on that day's calendar event only. For recurring
+ * tasks this patches the single instance, never the whole series, and the
+ * title shows each person: "Bible · Zen ✅ · Lily ⏳".
+ * @param {Object} task - The task (needs googleCalendarEventId)
+ * @param {string} date - 'YYYY-MM-DD'
  * @returns {Promise<boolean>} Success status
  */
-async function markEventMissed(eventId, userId, taskName) {
-  return await updateCalendarEvent(eventId, userId, {
-    summary: `❌ ${taskName}`,
-  });
+async function syncOccurrenceToCalendar(task, date) {
+  if (!task.googleCalendarEventId || !config.googleCalendar.user1RefreshToken) return false;
+  try {
+    const { Occurrence } = require('../database/models');
+    const { zonedInstant, addDays } = require('../utils/time');
+    const rows = await Occurrence.find({ taskId: task._id, date, status: { $ne: 'void' } }).lean();
+    if (rows.length === 0) return false;
+
+    const people = rows
+      .map((o) => `${config.memberName(o.userId)} ${STATUS_ICON[o.status] || ''}`.trim())
+      .join(' · ');
+    const summary = `${task.name} · ${people}`;
+
+    const calendar = google.calendar({ version: 'v3', auth: getOAuth2Client() });
+    let eventId = task.googleCalendarEventId;
+
+    if (task.type !== 'one-time') {
+      const { data } = await calendar.events.instances({
+        calendarId: config.googleCalendar.calendarId,
+        eventId,
+        timeMin: zonedInstant(date, '00:00').toISOString(),
+        timeMax: zonedInstant(addDays(date, 1), '00:00').toISOString(),
+        maxResults: 1,
+      });
+      if (!data.items?.length) return false;
+      eventId = data.items[0].id;
+    }
+
+    await calendar.events.patch({
+      calendarId: config.googleCalendar.calendarId,
+      eventId,
+      requestBody: { summary },
+    });
+    return true;
+  } catch (error) {
+    console.error('❌ Error syncing calendar instance:', error.message);
+    return false;
+  }
 }
 
 /**
@@ -268,8 +294,7 @@ module.exports = {
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
-  markEventCompleted,
-  markEventMissed,
+  syncOccurrenceToCalendar,
   getAuthUrl,
   getTokensFromCode,
   CALENDAR_COLORS,
