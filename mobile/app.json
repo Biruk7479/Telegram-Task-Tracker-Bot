@@ -100,6 +100,17 @@
         }
       ],
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "b07b1c33-d312-492b-9e3e-bbe1e82346fc"
+      }
+    },
+    "owner": "biruk7479"
   }
 }
