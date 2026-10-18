@@ -355,8 +355,53 @@ async function dayView(dateKey, now = new Date()) {
   });
 }
 
+// Per-day, per-member summary for calendars and widgets. Past and open days
+// come from occurrences; future days are projected from the current schedule.
+// state: none | future | open | perfect | partial | miss | bad
+async function daySummaries(from, to, now = new Date()) {
+  const today = todayKey(now);
+  const [rows, tasks] = await Promise.all([
+    Occurrence.find({ date: { $gte: from, $lte: to }, status: { $ne: 'void' } })
+      .select('userId date status taskId penalty').lean(),
+    to > today ? Task.find({ active: true }).lean() : [],
+  ]);
+
+  const days = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    const members = {};
+    for (const userId of config.memberIds()) {
+      const own = rows.filter((o) => o.date === date && o.userId === userId);
+      let total = own.filter((o) => o.status !== 'excused').length;
+      const done = own.filter((o) => o.status === 'done').length;
+      const failed = own.filter((o) => o.status === 'missed' || o.status === 'ignored').length;
+      const pending = own.filter((o) => o.status === 'pending').length;
+      const penalty = own.reduce((sum, o) => sum + (o.penalty || 0), 0);
+
+      if (date > today) {
+        const projected = tasks.filter((t) => assigneesOf(t).includes(userId) && isScheduledOn(t, date)
+          && !own.some((o) => String(o.taskId) === String(t._id))).length;
+        total += projected;
+      }
+
+      let state;
+      if (total === 0) state = 'none';
+      else if (date > today) state = 'future';
+      else if (done === total) state = 'perfect';
+      else if (failed >= 2 || (failed > 0 && done === 0)) state = 'bad';
+      else if (failed === 1) state = 'miss';
+      else if (pending > 0 && done === 0) state = 'open';
+      else state = 'partial';
+
+      members[userId] = { state, done, total, failed, pending, penalty };
+    }
+    days.push({ date, members });
+  }
+  return days;
+}
+
 module.exports = {
   httpError,
+  daySummaries,
   getMeta,
   setMeta,
   ensureDay,

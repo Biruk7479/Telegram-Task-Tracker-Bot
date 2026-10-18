@@ -90,7 +90,7 @@ router.get('/api/board', handle(async (req, res) => {
   const week = weekKeyOf(today);
   const yesterday = addDays(today, -1);
 
-  const [day, users, goals, feed, lastWeek, sharedStreak, upcoming] = await Promise.all([
+  const [day, users, goals, feed, lastWeek, sharedStreak, upcoming, weekDays] = await Promise.all([
     occurrences.dayView(today, now),
     User.find({ telegramId: { $in: config.memberIds() } }),
     Goal.find({ active: true }).lean(),
@@ -99,6 +99,7 @@ router.get('/api/board', handle(async (req, res) => {
     WeekResult.findOne().sort({ weekKey: -1 }).lean(),
     occurrences.sharedStreak(now),
     Task.find({ active: true, type: 'one-time', 'schedule.date': { $gte: new Date(`${today}T00:00:00Z`) } }).lean(),
+    occurrences.daySummaries(week, addDays(week, 6), now),
   ]);
 
   // Yesterday stays answerable until it closes; surface what is still pending.
@@ -143,6 +144,7 @@ router.get('/api/board', handle(async (req, res) => {
     deadlines,
     feed: feed.map((o) => ({ ...o, name: config.memberName(o.userId) })),
     lastWeek,
+    weekDays,
     yesterdayClosesAt: yesterdayOpen ? closeInstant(yesterday) : null,
   });
 }));
@@ -152,6 +154,18 @@ router.get('/api/day', handle(async (req, res) => {
   const date = req.query.date || todayKey();
   if (!isDateKey(date)) throw badRequest('date must be YYYY-MM-DD');
   res.json({ date, open: isDayOpen(date), members: await occurrences.dayView(date) });
+}));
+
+// Per-day summary for both members over a range (max 62 days), for calendars and widgets.
+router.get('/api/range', handle(async (req, res) => {
+  const { from, to } = req.query;
+  if (!isDateKey(from) || !isDateKey(to) || to < from) throw badRequest('from and to must be YYYY-MM-DD, from <= to');
+  if (daysBetween(from, to) > 61) throw badRequest('range is limited to 62 days');
+  res.json({
+    today: todayKey(),
+    members: config.memberIds().map((id) => ({ userId: id, name: config.memberName(id) })),
+    days: await occurrences.daySummaries(from, to),
+  });
 }));
 
 // A week's score for both members, with every penalty listed.

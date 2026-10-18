@@ -90,6 +90,11 @@ This command executes:
 - API Server (Port 3001)
 - Next.js Web Server (Port 3000)
 
+## Mobile app
+
+`mobile/` is an Expo (React Native) Android app with the one-screen Board and six
+home-screen widgets. See [mobile/README.md](mobile/README.md) for building the APK.
+
 ## How scoring works
 
 Every scheduled task becomes one **occurrence** per person per day (`pending → done | missed | ignored | excused`).
@@ -128,6 +133,7 @@ Reads are public; writes need `Authorization: Bearer <token>` from `POST /api/au
 | POST | `/api/auth/login` | `{ password }` → `{ token, user }` |
 | GET | `/api/board` | Everything for the one-screen board and widgets |
 | GET | `/api/day?date=` | Both members' occurrences for a day |
+| GET | `/api/range?from=&to=` | Per-day summary for both members (calendars, widgets; max 62 days) |
 | GET | `/api/week?week=` | Scores, penalties and excuses left |
 | POST | `/api/occurrences/mark` | `{ taskId, date?, action: done\|missed\|excused\|undo\|progress, amount? }` |
 | GET/POST | `/api/goals`, `/api/goals/:id/contribute` | Shared goals such as combined savings |
@@ -156,6 +162,7 @@ TEST_MONGODB_URI=mongodb://127.0.0.1:27099/duo_test npm test
 │   ├── utils/        # Timezone-safe date helpers
 │   └── index.js      # Bot entry point and scheduler
 ├── test/             # node:test unit and integration tests
+├── mobile/           # Expo Android app and home-screen widgets
 ├── web/
 │   ├── app/          # Next.js app router pages
 │   ├── components/   # React UI components

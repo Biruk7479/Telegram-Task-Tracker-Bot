@@ -85,6 +85,10 @@ test('api', { skip }, async (t) => {
     assert.equal(lily.weeklyXp, 100);
     assert.equal(lily.excusesLeft, 2);
     assert.ok(Array.isArray(board.feed) && Array.isArray(board.goals) && Array.isArray(board.deadlines));
+    assert.equal(board.weekDays.length, 7);
+    const todayRow = board.weekDays.find((d) => d.date === board.today);
+    assert.equal(todayRow.members[LILY].state, 'open');
+    assert.equal(todayRow.members[LILY].total, 1);
   });
 
   await t.test('goals take contributions from either member', async () => {
@@ -96,6 +100,14 @@ test('api', { skip }, async (t) => {
     assert.equal(res.body.current, 2000);
     assert.equal(res.body.byMember[ZEN], 1500);
     assert.equal(res.body.percent, 4);
+  });
+
+  await t.test('range summarizes days for both members', async () => {
+    const today = require('../bot/utils/time').todayKey();
+    const res = await call('GET', `/api/range?from=${today}&to=${today}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.days[0].members[ZEN].total, 1);
+    assert.equal((await call('GET', '/api/range?from=2026-01-01&to=2026-06-01')).status, 400);
   });
 
   await t.test('calendar keeps the shape the website reads, plus status', async () => {
