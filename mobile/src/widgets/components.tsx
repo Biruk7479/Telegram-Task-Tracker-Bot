@@ -20,13 +20,9 @@ export interface Size {
   height: number;
 }
 
-// k scales text, rows and bars with the widget's width (set in render.tsx).
-export type WidgetPalette = Palette & { k?: number };
-
-type P = { data: WidgetData; size: Size; p: WidgetPalette };
+type P = { data: WidgetData; size: Size; p: Palette };
 
 const ROW = 40;
-const rowOf = (p: WidgetPalette) => Math.round(ROW * (p.k ?? 1));
 const PAD = 12;
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -43,7 +39,7 @@ const membersOf = (data: WidgetData) => {
 
 // ---------- shared pieces ----------
 
-function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: WidgetPalette; children: any; clickAction?: string }) {
+function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: Palette; children: any; clickAction?: string }) {
   return (
     <FlexWidget
       clickAction={clickAction}
@@ -58,19 +54,19 @@ function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: WidgetPalette; ch
 }
 
 function Text({ text, p, size = 18, color, bold, maxLines = 1, flex }: {
-  text: string; p: WidgetPalette; size?: number; color?: `#${string}`; bold?: boolean; maxLines?: number; flex?: number;
+  text: string; p: Palette; size?: number; color?: `#${string}`; bold?: boolean; maxLines?: number; flex?: number;
 }) {
   return (
     <TextWidget
       text={text}
       maxLines={maxLines}
       truncate="END"
-      style={{ fontSize: Math.round(size * (p.k ?? 1)), color: color ?? p.text, fontWeight: bold ? '700' : '400', ...(flex ? { flex } : {}) }}
+      style={{ fontSize: size, color: color ?? p.text, fontWeight: bold ? '700' : '400', ...(flex ? { flex } : {}) }}
     />
   );
 }
 
-function Notice({ p, text }: { p: WidgetPalette; text: string }) {
+function Notice({ p, text }: { p: Palette; text: string }) {
   return (
     <Shell p={p}>
       <FlexWidget style={{ flex: 1, width: 'match_parent', justifyContent: 'center', alignItems: 'center' }}>
@@ -81,8 +77,7 @@ function Notice({ p, text }: { p: WidgetPalette; text: string }) {
 }
 
 // A horizontal bar of `fraction` filled, drawn at a fixed dp width.
-function Bar({ fraction, color, p, width, height = 14 }: { fraction: number; color: `#${string}`; p: WidgetPalette; width: number; height?: number }) {
-  height = Math.round(height * (p.k ?? 1));
+function Bar({ fraction, color, p, width, height = 14 }: { fraction: number; color: `#${string}`; p: Palette; width: number; height?: number }) {
   const filled = Math.round(Math.max(0, Math.min(1, fraction)) * width);
   return (
     <FlexWidget style={{ width, height, backgroundColor: p.faint, borderRadius: height / 2, flexDirection: 'row' }}>
@@ -91,7 +86,7 @@ function Bar({ fraction, color, p, width, height = 14 }: { fraction: number; col
   );
 }
 
-function Header({ p, title, right, offline }: { p: WidgetPalette; title: string; right?: string; offline?: boolean }) {
+function Header({ p, title, right, offline }: { p: Palette; title: string; right?: string; offline?: boolean }) {
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
       <FlexWidget style={{ flex: 1, marginRight: 8 }}>
@@ -99,12 +94,12 @@ function Header({ p, title, right, offline }: { p: WidgetPalette; title: string;
       </FlexWidget>
       {offline ? <Text p={p} text="offline · " size={15} color={p.warn} /> : null}
       {right ? <Text p={p} text={right} size={17} color={p.muted} /> : null}
-      <TextWidget text="  ↻" clickAction="REFRESH" style={{ fontSize: Math.round(20 * (p.k ?? 1)), color: p.muted }} />
+      <TextWidget text="  ↻" clickAction="REFRESH" style={{ fontSize: 20, color: p.muted }} />
     </FlexWidget>
   );
 }
 
-function DuelRows({ data, p, width, compact }: { data: WidgetData; p: WidgetPalette; width: number; compact: boolean }) {
+function DuelRows({ data, p, width, compact }: { data: WidgetData; p: Palette; width: number; compact: boolean }) {
   const { members, colorOf } = membersOf(data);
   const start = data.board?.rules.startXp ?? 100;
   if (compact) {
@@ -123,17 +118,16 @@ function DuelRows({ data, p, width, compact }: { data: WidgetData; p: WidgetPale
       </FlexWidget>
     );
   }
-  const k = p.k ?? 1;
-  const barWidth = Math.max(40, width - Math.round(210 * k));
+  const barWidth = Math.max(40, width - 210);
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
       {members.map((m) => (
-        <FlexWidget key={m.userId} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', height: rowOf(p) }}>
-          <FlexWidget style={{ width: Math.round(80 * k) }}>
+        <FlexWidget key={m.userId} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', height: ROW }}>
+          <FlexWidget style={{ width: 80 }}>
             <Text p={p} text={m.name} bold color={colorOf(m.userId, p)} size={18} />
           </FlexWidget>
           <Bar fraction={m.weeklyXp / start} color={colorOf(m.userId, p)} p={p} width={barWidth} height={16} />
-          <FlexWidget style={{ width: Math.round(120 * k), alignItems: 'flex-end' }}>
+          <FlexWidget style={{ width: 120, alignItems: 'flex-end' }}>
             <Text p={p} text={`♥ ${m.weeklyXp} · L${m.level}`} size={17} />
           </FlexWidget>
         </FlexWidget>
@@ -142,7 +136,7 @@ function DuelRows({ data, p, width, compact }: { data: WidgetData; p: WidgetPale
   );
 }
 
-function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: WidgetPalette; clickable: boolean; color: `#${string}` }) {
+function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: Palette; clickable: boolean; color: `#${string}` }) {
   const done = o.status === 'done';
   const failed = o.status === 'missed' || o.status === 'ignored';
   const glyphColor = done ? color : failed ? p.danger : p.muted;
@@ -151,9 +145,9 @@ function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: WidgetPalette; 
     <FlexWidget
       clickAction={clickable && o.status === 'pending' ? 'TOGGLE' : 'OPEN_APP'}
       clickActionData={{ taskId: o.taskId, date: o.date }}
-      style={{ width: 'match_parent', height: rowOf(p), flexDirection: 'row', alignItems: 'center' }}
+      style={{ width: 'match_parent', height: ROW, flexDirection: 'row', alignItems: 'center' }}
     >
-      <FlexWidget style={{ width: Math.round(30 * (p.k ?? 1)) }}>
+      <FlexWidget style={{ width: 30 }}>
         <Text p={p} text={statusGlyph(o)} bold color={glyphColor} size={20} />
       </FlexWidget>
       <Text p={p} text={o.taskName} flex={1} size={18} color={done || failed ? p.muted : p.text} />
@@ -162,7 +156,7 @@ function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: WidgetPalette; 
   );
 }
 
-function Checklist({ list, p, rows, clickable, color }: { list: Occurrence[]; p: WidgetPalette; rows: number; clickable: boolean; color: `#${string}` }) {
+function Checklist({ list, p, rows, clickable, color }: { list: Occurrence[]; p: Palette; rows: number; clickable: boolean; color: `#${string}` }) {
   if (list.length === 0) return <Text p={p} text="Nothing scheduled" size={17} color={p.muted} />;
   // Open items first so the rows that fit are the ones still asking something of you.
   const sorted = [...list].sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending'));
@@ -176,10 +170,10 @@ function Checklist({ list, p, rows, clickable, color }: { list: Occurrence[]; p:
   );
 }
 
-const stateColor = (d: DaySummary | undefined, userId: string | undefined, p: WidgetPalette) =>
+const stateColor = (d: DaySummary | undefined, userId: string | undefined, p: Palette) =>
   (d && userId && d.members[userId] ? p.state[d.members[userId].state] : p.state.none);
 
-function WeekCells({ data, p, cell }: { data: WidgetData; p: WidgetPalette; cell: number }) {
+function WeekCells({ data, p, cell }: { data: WidgetData; p: Palette; cell: number }) {
   const { members } = membersOf(data);
   const [a, b] = members;
   const days = data.board?.weekDays ?? [];
@@ -198,7 +192,7 @@ function WeekCells({ data, p, cell }: { data: WidgetData; p: WidgetPalette; cell
   );
 }
 
-function GoalLine({ data, p, width }: { data: WidgetData; p: WidgetPalette; width: number }) {
+function GoalLine({ data, p, width }: { data: WidgetData; p: Palette; width: number }) {
   const goal = data.board?.goals[0];
   if (!goal) return null;
   return (
@@ -231,7 +225,7 @@ export function TodayWidget({ data, size, p }: P) {
   if (!data.board || !data.meId) return <Notice p={p} text="Loading…" />;
   const { me, colorOf } = membersOf(data);
   const list = myOpenList(data.board, data.meId);
-  const rows = Math.max(1, Math.floor((size.height - PAD * 2 - 24) / rowOf(p)));
+  const rows = Math.max(1, Math.floor((size.height - PAD * 2 - 24) / ROW));
   return (
     <Shell p={p}>
       <Header p={p} title={`My today  ${me?.done ?? 0}/${me?.total ?? 0}`} right={`♥ ${me?.weeklyXp ?? ''}`} offline={data.offline} />
@@ -249,7 +243,7 @@ export function PartnerWidget({ data, size, p }: P) {
   const last = data.board.feed.find((f) => f.userId === partner.userId);
   const lastText = last ? `${last.status === 'done' ? '✓' : last.status === 'excused' ? '–' : '✗'} ${last.taskName}` : 'Nothing yet today';
   const ring = Math.min(58, size.height - PAD * 2);
-  const rows = Math.floor((size.height - PAD * 2 - ring - 4) / rowOf(p));
+  const rows = Math.floor((size.height - PAD * 2 - ring - 4) / ROW);
   return (
     <Shell p={p}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
@@ -336,8 +330,8 @@ export function BoardWidget({ data, size, p }: P) {
   const col = (inner - 10) / 2;
   const showWeek = size.height >= 300;
   const showFooter = size.height >= 400;
-  const fixed = 36 + 2 * rowOf(p) + (showWeek ? 54 : 0) + (showFooter ? 56 : 0) + 30;
-  const rows = Math.max(1, Math.floor((size.height - PAD * 2 - fixed) / rowOf(p)));
+  const fixed = 36 + 2 * ROW + (showWeek ? 54 : 0) + (showFooter ? 56 : 0) + 30;
+  const rows = Math.max(1, Math.floor((size.height - PAD * 2 - fixed) / ROW));
   const next = board.deadlines[0];
   return (
     <Shell p={p}>

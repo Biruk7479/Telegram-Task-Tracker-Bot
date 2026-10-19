@@ -8,17 +8,10 @@ export const isWidgetName = (name: string): name is WidgetName => name in WIDGET
 // "system" gives Android both versions to pick from; a chosen theme forces one.
 export function renderWidget(name: WidgetName, data: WidgetData, size: Size, mode: ThemeMode = 'system') {
   const Component = WIDGETS[name];
-  // Text grows with the widget: single-column widgets up to +35%; the two-column
-  // board barely, so task names still fit side by side.
-  const k = name === 'Board'
-    ? Math.min(1.1, Math.max(1, size.width / 330))
-    : Math.min(1.35, Math.max(1, size.width / 270));
-  const L = { ...light, k };
-  const D = { ...dark, k };
-  if (mode === 'light') return <Component data={data} size={size} p={L} />;
-  if (mode === 'dark') return <Component data={data} size={size} p={D} />;
+  if (mode === 'light') return <Component data={data} size={size} p={light} />;
+  if (mode === 'dark') return <Component data={data} size={size} p={dark} />;
   return {
-    light: <Component data={data} size={size} p={L} />,
-    dark: <Component data={data} size={size} p={D} />,
+    light: <Component data={data} size={size} p={light} />,
+    dark: <Component data={data} size={size} p={dark} />,
   };
 }
