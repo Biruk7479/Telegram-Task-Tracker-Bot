@@ -9,7 +9,7 @@ import { Card, SplitCell, T } from '../../components/ui';
 import { fetchDay, fetchRange } from '../../lib/api';
 import { counterText, statusGlyph } from '../../lib/local';
 import { useStore } from '../../lib/store';
-import { memberColor, usePalette } from '../../lib/theme';
+import { memberColor, type as size, usePalette } from '../../lib/theme';
 import type { DayState, Occurrence, RangeReport } from '../../lib/types';
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -65,14 +65,14 @@ export default function CalendarScreen() {
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: p.bg }}>
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.header}>
-          <Pressable onPress={() => move(-1)} hitSlop={12}><T size={22}>‹</T></Pressable>
-          <T size={20} bold style={{ flex: 1, textAlign: 'center' }}>{title}</T>
-          <Pressable onPress={() => move(1)} hitSlop={12}><T size={22}>›</T></Pressable>
+          <Pressable onPress={() => move(-1)} hitSlop={12}><T size={size.xl}>‹</T></Pressable>
+          <T size={size.xl} bold style={{ flex: 1, textAlign: 'center' }}>{title}</T>
+          <Pressable onPress={() => move(1)} hitSlop={12}><T size={size.xl}>›</T></Pressable>
         </View>
 
         <Card style={{ gap: 6 }}>
           <View style={styles.week}>
-            {WEEKDAYS.map((d, i) => <T key={i} size={11} muted style={{ width: cell, textAlign: 'center' }}>{d}</T>)}
+            {WEEKDAYS.map((d, i) => <T key={i} size={size.xs} muted style={{ width: cell, textAlign: 'center' }}>{d}</T>)}
           </View>
           {!range ? (
             <View style={{ height: cell * 5, justifyContent: 'center' }}>
@@ -97,11 +97,11 @@ export default function CalendarScreen() {
         </Card>
 
         <View style={styles.legend}>
-          <T size={11} muted>◤ {a?.name ?? ''}   ◢ {b?.name ?? ''}</T>
+          <T size={size.xs} muted>◤ {a?.name ?? ''}   ◢ {b?.name ?? ''}</T>
           {LEGEND.map(([state, label]) => (
             <View key={state} style={styles.legendItem}>
               <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: p.state[state] }} />
-              <T size={11} muted>{label}</T>
+              <T size={size.xs} muted>{label}</T>
             </View>
           ))}
         </View>
@@ -111,13 +111,13 @@ export default function CalendarScreen() {
             <T bold>{selected}</T>
             {!day ? <ActivityIndicator color={p.muted} /> : day.map((m, i) => (
               <View key={m.userId} style={{ gap: 2 }}>
-                <T size={13} bold color={memberColor(p, i)}>{m.name}</T>
-                {m.items.length === 0 ? <T size={12} muted>Nothing</T> : m.items.map((o) => (
-                  <T key={o._id} size={13}>
-                    <T size={13} color={o.status === 'done' ? memberColor(p, i) : o.status === 'missed' || o.status === 'ignored' ? p.danger : p.muted}>
+                <T size={size.sm} bold color={memberColor(p, i)}>{m.name}</T>
+                {m.items.length === 0 ? <T size={size.sm} muted>Nothing</T> : m.items.map((o) => (
+                  <T key={o._id} size={size.sm}>
+                    <T size={size.sm} color={o.status === 'done' ? memberColor(p, i) : o.status === 'missed' || o.status === 'ignored' ? p.danger : p.muted}>
                       {statusGlyph(o)}{' '}
                     </T>
-                    {o.taskName} <T size={11} muted>{[counterText(o), o.penalty ? `−${o.penalty}` : '', o.status === 'ignored' ? 'ignored' : ''].filter(Boolean).join(' · ')}</T>
+                    {o.taskName} <T size={size.xs} muted>{[counterText(o), o.penalty ? `−${o.penalty}` : '', o.status === 'ignored' ? 'ignored' : ''].filter(Boolean).join(' · ')}</T>
                   </T>
                 ))}
               </View>

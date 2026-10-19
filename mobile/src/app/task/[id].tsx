@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, ScrollView, StyleSheet,
 import { Button, Chip, T } from '../../components/ui';
 import { createTask, deleteTask, fetchStructure, fetchTasks, updateTask, type TaskInput } from '../../lib/api';
 import { useStore } from '../../lib/store';
-import { memberColor, usePalette } from '../../lib/theme';
+import { memberColor, type as size, usePalette } from '../../lib/theme';
 import type { Owner, StructureArea, Task } from '../../lib/types';
 
 type Who = 'me' | 'partner' | 'both';
@@ -125,10 +125,10 @@ export default function TaskForm() {
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: p.bg }}>
       <Stack.Screen options={{ title: isNew ? 'New task' : 'Edit task' }} />
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <T size={12} muted>Name</T>
+        <T size={size.sm} muted>Name</T>
         <TextInput value={name} onChangeText={setName} placeholder="Bible — 1 chapter" placeholderTextColor={p.muted} style={input} />
 
-        <T size={12} muted>Who</T>
+        <T size={size.sm} muted>Who</T>
         <View style={styles.wrap}>
           <Chip label="Me" active={who === 'me'} onPress={() => { setWho('me'); setArea(''); }} color={memberColor(p, members.findIndex((m) => m.userId === meId))} />
           <Chip label={members.find((m) => m.userId === partnerId)?.name ?? 'Partner'} active={who === 'partner'} onPress={() => { setWho('partner'); setArea(''); }} color={memberColor(p, members.findIndex((m) => m.userId === partnerId))} />
@@ -140,13 +140,13 @@ export default function TaskForm() {
               <Chip label="Each of us" active={mode === 'each'} onPress={() => setMode('each')} />
               <Chip label="Together (one result)" active={mode === 'pooled'} onPress={() => setMode('pooled')} />
             </View>
-            <T size={11} muted>{mode === 'each' ? 'You both have to do it; each miss costs only the one who missed.' : 'Done by either counts for both; a miss costs you both.'}</T>
+            <T size={size.xs} muted>{mode === 'each' ? 'You both have to do it; each miss costs only the one who missed.' : 'Done by either counts for both; a miss costs you both.'}</T>
           </>
         ) : null}
 
         {areas.length ? (
           <>
-            <T size={12} muted>Area</T>
+            <T size={size.sm} muted>Area</T>
             <View style={styles.wrap}>
               {areas.map((a) => <Chip key={a.area} label={a.area} active={area === a.area} onPress={() => { setArea(area === a.area ? '' : a.area); setItem(''); }} />)}
             </View>
@@ -158,13 +158,13 @@ export default function TaskForm() {
           </>
         ) : null}
 
-        <T size={12} muted>When</T>
+        <T size={size.sm} muted>When</T>
         {isNew ? (
           <View style={styles.wrap}>
             {KINDS.map(([k, label]) => <Chip key={k} label={label} active={kind === k} onPress={() => setKind(k)} />)}
           </View>
         ) : (
-          <T size={13}>{KINDS.find(([k]) => k === kind)?.[1]} <T size={11} muted>(to change this, make a new task)</T></T>
+          <T size={size.sm}>{KINDS.find(([k]) => k === kind)?.[1]} <T size={size.xs} muted>(to change this, make a new task)</T></T>
         )}
         {kind === 'weekly' ? (
           <View style={styles.wrap}>
@@ -180,17 +180,17 @@ export default function TaskForm() {
           <TextInput value={time} onChangeText={setTime} placeholder="Reminder time, e.g. 21:00" placeholderTextColor={p.muted} keyboardType="numbers-and-punctuation" style={input} />
         ) : null}
 
-        <T size={12} muted>How many each time</T>
+        <T size={size.sm} muted>How many each time</T>
         <View style={[styles.wrap, { gap: 8 }]}>
           <TextInput value={target} onChangeText={setTarget} keyboardType="number-pad" style={[input, { width: 80 }]} />
           <TextInput value={unit} onChangeText={setUnit} placeholder="unit, e.g. apps" placeholderTextColor={p.muted} style={[input, { flex: 1 }]} />
         </View>
-        <T size={11} muted>More than 1 makes it a counter: tap +1 each time; short of the target at day’s end counts as a miss.</T>
+        <T size={size.xs} muted>More than 1 makes it a counter: tap +1 each time; short of the target at day’s end counts as a miss.</T>
 
-        <T size={12} muted>Notes</T>
+        <T size={size.sm} muted>Notes</T>
         <TextInput value={description} onChangeText={setDescription} placeholder="Optional" placeholderTextColor={p.muted} multiline style={[input, { height: 80, paddingTop: 12 }]} />
 
-        {problem ? <T size={13} color={p.warn}>{problem}</T> : null}
+        {problem ? <T size={size.sm} color={p.warn}>{problem}</T> : null}
         <Button label={busy ? 'Saving…' : 'Save'} onPress={save} disabled={!!problem || busy} />
         {!isNew ? <Button label="Delete task" kind="danger" onPress={remove} /> : null}
       </ScrollView>

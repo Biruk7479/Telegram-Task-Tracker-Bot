@@ -4,19 +4,20 @@ import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-a
 import { mark, tapAction } from '../lib/api';
 import { applyLocally, replaceOccurrence, myOpenList } from '../lib/local';
 import { loadCachedBoard, loadSession } from '../lib/storage';
+import { loadThemeMode, type ThemeMode } from '../lib/theme';
 import { loadWidgetData } from './data';
 import { isWidgetName, renderWidget, WIDGET_NAMES } from './render';
 import type { WidgetData } from './components';
 
 // Redraw every other placed widget from the same fresh data.
-async function redrawOthers(except: string, data: WidgetData) {
+async function redrawOthers(except: string, data: WidgetData, mode: ThemeMode) {
   for (const name of WIDGET_NAMES) {
     if (name === except) continue;
     await requestWidgetUpdate({
       widgetName: name,
       renderWidget: async (info) => {
         const own = name === 'Month' ? await loadWidgetData({ withMonth: true }) : data;
-        return renderWidget(name, own, info);
+        return renderWidget(name, own, info, mode);
       },
     });
   }
@@ -26,6 +27,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   const { widgetInfo, widgetAction, clickAction, clickActionData } = props;
   const name = widgetInfo.widgetName;
   if (!isWidgetName(name) || widgetAction === 'WIDGET_DELETED') return;
+  const mode = await loadThemeMode();
 
   if (widgetAction === 'WIDGET_CLICK' && clickAction === 'TOGGLE') {
     const session = await loadSession();
@@ -41,7 +43,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       // Show the result straight away, then confirm with the server.
       props.renderWidget(renderWidget(name, {
         board: replaceOccurrence(cached, applyLocally(target, action)), meId: session.user.telegramId,
-      }, widgetInfo));
+      }, widgetInfo, mode));
       try {
         await mark(session, { taskId, date, action });
       } catch {
@@ -51,8 +53,8 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   }
 
   const data = await loadWidgetData({ withMonth: name === 'Month' });
-  props.renderWidget(renderWidget(name, data, widgetInfo));
+  props.renderWidget(renderWidget(name, data, widgetInfo, mode));
 
   // A tap changes what every widget shows; keep them in step.
-  if (widgetAction === 'WIDGET_CLICK') await redrawOthers(name, data);
+  if (widgetAction === 'WIDGET_CLICK') await redrawOthers(name, data, mode);
 }

@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { T } from '../../components/ui';
 import { fetchTasks } from '../../lib/api';
 import { useStore } from '../../lib/store';
-import { memberColor, usePalette } from '../../lib/theme';
+import { memberColor, type as size, usePalette } from '../../lib/theme';
 import { scheduleText } from '../../lib/local';
 import type { Task } from '../../lib/types';
 
@@ -43,9 +43,9 @@ export default function TasksScreen() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: p.bg }}>
       <View style={styles.header}>
-        <T size={22} bold style={{ flex: 1 }}>Tasks</T>
+        <T size={size.xl} bold style={{ flex: 1 }}>Tasks</T>
         <Pressable onPress={() => router.push('/task/new')} style={[styles.add, { backgroundColor: p.accent }]}>
-          <T size={22} color={p.card}>+</T>
+          <T size={size.xl} color={p.card}>+</T>
         </Pressable>
       </View>
       {!tasks ? (
@@ -59,7 +59,7 @@ export default function TasksScreen() {
           stickySectionHeadersEnabled={false}
           ListEmptyComponent={<T muted style={{ textAlign: 'center', marginTop: 40 }}>No tasks yet — tap + to add one.</T>}
           renderSectionHeader={({ section }) => (
-            <T size={12} bold color={section.color} style={styles.section}>{section.title.toUpperCase()}</T>
+            <T size={size.sm} bold color={section.color} style={styles.section}>{section.title.toUpperCase()}</T>
           )}
           renderItem={({ item }) => (
             <Pressable
@@ -68,7 +68,7 @@ export default function TasksScreen() {
             >
               <View style={{ flex: 1, gap: 2 }}>
                 <T bold lines={1}>{item.name}</T>
-                <T size={12} muted lines={1}>
+                <T size={size.sm} muted lines={1}>
                   {[item.area, scheduleText(item), item.target > 1 ? `${item.target} ${item.unit}`.trim() : '', item.mode === 'pooled' ? 'pooled' : '']
                     .filter(Boolean).join(' · ')}
                 </T>

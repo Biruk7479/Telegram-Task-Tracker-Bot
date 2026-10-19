@@ -22,8 +22,8 @@ export interface Size {
 
 type P = { data: WidgetData; size: Size; p: Palette };
 
-const ROW = 22;
-const PAD = 10;
+const ROW = 30;
+const PAD = 12;
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 const membersOf = (data: WidgetData) => {
@@ -45,7 +45,7 @@ function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: Palette; children
       clickAction={clickAction}
       style={{
         height: 'match_parent', width: 'match_parent', backgroundColor: p.card,
-        borderRadius: 18, padding: PAD, flexDirection: 'column',
+        borderRadius: 22, padding: PAD, flexDirection: 'column',
       }}
     >
       {children}
@@ -53,7 +53,7 @@ function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: Palette; children
   );
 }
 
-function Text({ text, p, size = 12, color, bold, maxLines = 1, flex }: {
+function Text({ text, p, size = 14, color, bold, maxLines = 1, flex }: {
   text: string; p: Palette; size?: number; color?: `#${string}`; bold?: boolean; maxLines?: number; flex?: number;
 }) {
   return (
@@ -61,7 +61,7 @@ function Text({ text, p, size = 12, color, bold, maxLines = 1, flex }: {
       text={text}
       maxLines={maxLines}
       truncate="END"
-      style={{ fontSize: size, color: color ?? p.text, fontWeight: bold ? '600' : '400', ...(flex ? { flex } : {}) }}
+      style={{ fontSize: size, color: color ?? p.text, fontWeight: bold ? '700' : '400', ...(flex ? { flex } : {}) }}
     />
   );
 }
@@ -77,7 +77,7 @@ function Notice({ p, text }: { p: Palette; text: string }) {
 }
 
 // A horizontal bar of `fraction` filled, drawn at a fixed dp width.
-function Bar({ fraction, color, p, width, height = 6 }: { fraction: number; color: `#${string}`; p: Palette; width: number; height?: number }) {
+function Bar({ fraction, color, p, width, height = 10 }: { fraction: number; color: `#${string}`; p: Palette; width: number; height?: number }) {
   const filled = Math.round(Math.max(0, Math.min(1, fraction)) * width);
   return (
     <FlexWidget style={{ width, height, backgroundColor: p.faint, borderRadius: height / 2, flexDirection: 'row' }}>
@@ -89,10 +89,10 @@ function Bar({ fraction, color, p, width, height = 6 }: { fraction: number; colo
 function Header({ p, title, right, offline }: { p: Palette; title: string; right?: string; offline?: boolean }) {
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-      <Text p={p} text={title} bold flex={1} size={13} />
-      {offline ? <Text p={p} text="offline · " size={10} color={p.warn} /> : null}
-      {right ? <Text p={p} text={right} size={11} color={p.muted} /> : null}
-      <TextWidget text="  ↻" clickAction="REFRESH" style={{ fontSize: 13, color: p.muted }} />
+      <Text p={p} text={title} bold flex={1} size={16} />
+      {offline ? <Text p={p} text="offline · " size={12} color={p.warn} /> : null}
+      {right ? <Text p={p} text={right} size={13} color={p.muted} /> : null}
+      <TextWidget text="  ↻" clickAction="REFRESH" style={{ fontSize: 16, color: p.muted }} />
     </FlexWidget>
   );
 }
@@ -107,8 +107,8 @@ function DuelRows({ data, p, width, compact }: { data: WidgetData; p: Palette; w
         {members.map((m, i) => (
           <FlexWidget key={m.userId} style={{ width: half, flexDirection: 'column', marginLeft: i ? 8 : 0 }}>
             <FlexWidget style={{ flexDirection: 'row', width: 'match_parent' }}>
-              <Text p={p} text={m.name} bold color={colorOf(m.userId, p)} flex={1} size={11} />
-              <Text p={p} text={`♥ ${m.weeklyXp}`} bold size={11} />
+              <Text p={p} text={m.name} bold color={colorOf(m.userId, p)} flex={1} size={13} />
+              <Text p={p} text={`♥ ${m.weeklyXp}`} bold size={13} />
             </FlexWidget>
             <Bar fraction={m.weeklyXp / start} color={colorOf(m.userId, p)} p={p} width={half} />
           </FlexWidget>
@@ -116,17 +116,17 @@ function DuelRows({ data, p, width, compact }: { data: WidgetData; p: Palette; w
       </FlexWidget>
     );
   }
-  const barWidth = Math.max(40, width - 130);
+  const barWidth = Math.max(40, width - 160);
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
       {members.map((m) => (
         <FlexWidget key={m.userId} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', height: ROW }}>
-          <FlexWidget style={{ width: 52 }}>
-            <Text p={p} text={m.name} bold color={colorOf(m.userId, p)} size={12} />
+          <FlexWidget style={{ width: 62 }}>
+            <Text p={p} text={m.name} bold color={colorOf(m.userId, p)} size={14} />
           </FlexWidget>
-          <Bar fraction={m.weeklyXp / start} color={colorOf(m.userId, p)} p={p} width={barWidth} height={8} />
-          <FlexWidget style={{ width: 70, alignItems: 'flex-end' }}>
-            <Text p={p} text={`♥ ${m.weeklyXp} · L${m.level}`} size={11} />
+          <Bar fraction={m.weeklyXp / start} color={colorOf(m.userId, p)} p={p} width={barWidth} height={12} />
+          <FlexWidget style={{ width: 90, alignItems: 'flex-end' }}>
+            <Text p={p} text={`♥ ${m.weeklyXp} · L${m.level}`} size={13} />
           </FlexWidget>
         </FlexWidget>
       ))}
@@ -145,17 +145,17 @@ function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: Palette; clicka
       clickActionData={{ taskId: o.taskId, date: o.date }}
       style={{ width: 'match_parent', height: ROW, flexDirection: 'row', alignItems: 'center' }}
     >
-      <FlexWidget style={{ width: 18 }}>
-        <Text p={p} text={statusGlyph(o)} bold color={glyphColor} size={13} />
+      <FlexWidget style={{ width: 24 }}>
+        <Text p={p} text={statusGlyph(o)} bold color={glyphColor} size={16} />
       </FlexWidget>
-      <Text p={p} text={o.taskName} flex={1} size={12} color={done || failed ? p.muted : p.text} />
-      {meta ? <Text p={p} text={` ${meta}`} size={10} color={p.muted} /> : null}
+      <Text p={p} text={o.taskName} flex={1} size={14} color={done || failed ? p.muted : p.text} />
+      {meta ? <Text p={p} text={` ${meta}`} size={12} color={p.muted} /> : null}
     </FlexWidget>
   );
 }
 
 function Checklist({ list, p, rows, clickable, color }: { list: Occurrence[]; p: Palette; rows: number; clickable: boolean; color: `#${string}` }) {
-  if (list.length === 0) return <Text p={p} text="Nothing scheduled" size={11} color={p.muted} />;
+  if (list.length === 0) return <Text p={p} text="Nothing scheduled" size={13} color={p.muted} />;
   // Open items first so the rows that fit are the ones still asking something of you.
   const sorted = [...list].sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending'));
   const shown = sorted.slice(0, list.length > rows ? Math.max(0, rows - 1) : rows);
@@ -163,7 +163,7 @@ function Checklist({ list, p, rows, clickable, color }: { list: Occurrence[]; p:
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
       {shown.map((o) => <ItemRow key={o._id} o={o} p={p} clickable={clickable} color={color} />)}
-      {hidden > 0 ? <Text p={p} text={`+${hidden} more`} size={10} color={p.muted} /> : null}
+      {hidden > 0 ? <Text p={p} text={`+${hidden} more`} size={12} color={p.muted} /> : null}
     </FlexWidget>
   );
 }
@@ -183,7 +183,7 @@ function WeekCells({ data, p, cell }: { data: WidgetData; p: Palette; cell: numb
             svg={splitCellSvg(stateColor(d, a?.userId, p), stateColor(d, b?.userId, p), cell, d.date === data.board?.today ? p.text : undefined)}
             style={{ width: cell, height: cell }}
           />
-          {cell >= 18 ? <Text p={p} text={DAY_LETTERS[i]} size={9} color={p.muted} /> : null}
+          {cell >= 18 ? <Text p={p} text={DAY_LETTERS[i]} size={11} color={p.muted} /> : null}
         </FlexWidget>
       ))}
     </FlexWidget>
@@ -195,7 +195,7 @@ function GoalLine({ data, p, width }: { data: WidgetData; p: Palette; width: num
   if (!goal) return null;
   return (
     <FlexWidget style={{ flexDirection: 'column', width }}>
-      <Text p={p} text={`💰 ${shortNumber(goal.current)} / ${shortNumber(goal.target)} ${goal.unit}`} size={11} />
+      <Text p={p} text={`💰 ${shortNumber(goal.current)} / ${shortNumber(goal.target)} ${goal.unit}`} size={13} />
       <Bar fraction={goal.percent / 100} color={p.good} p={p} width={width} />
     </FlexWidget>
   );
@@ -213,7 +213,7 @@ export function DuelWidget({ data, size, p }: P) {
     <Shell p={p}>
       {compact ? null : <Header p={p} title="Weekly duel" right={`${data.board.daysLeftInWeek}d left`} offline={data.offline} />}
       <DuelRows data={data} p={p} width={inner} compact={compact} />
-      {!compact && owed.length ? <Text p={p} text={`🚨 ${owed[0]}`} size={10} color={p.danger} /> : null}
+      {!compact && owed.length ? <Text p={p} text={`🚨 ${owed[0]}`} size={12} color={p.danger} /> : null}
     </Shell>
   );
 }
@@ -249,9 +249,9 @@ export function PartnerWidget({ data, size, p }: P) {
         <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
           <FlexWidget style={{ flexDirection: 'row', width: 'match_parent' }}>
             <Text p={p} text={`${partner.name} · ${partner.done}/${partner.total}`} bold color={color} flex={1} />
-            <Text p={p} text={`♥ ${partner.weeklyXp}`} size={11} />
+            <Text p={p} text={`♥ ${partner.weeklyXp}`} size={13} />
           </FlexWidget>
-          <Text p={p} text={lastText} size={11} color={p.muted} />
+          <Text p={p} text={lastText} size={13} color={p.muted} />
         </FlexWidget>
       </FlexWidget>
       {rows > 0 ? <Checklist list={partner.items} p={p} rows={rows} clickable={false} color={color} /> : null}
@@ -270,7 +270,7 @@ export function WeekWidget({ data, size, p }: P) {
       <FlexWidget style={{ width: 'match_parent', flex: 1, flexDirection: 'row', alignItems: 'center' }}>
         <WeekCells data={data} p={p} cell={cell} />
         <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 4 }}>
-          <Text p={p} text={`🔥 ${data.board.sharedStreak} together · ${data.board.daysLeftInWeek}d left`} size={10} color={p.muted} />
+          <Text p={p} text={`🔥 ${data.board.sharedStreak} together · ${data.board.daysLeftInWeek}d left`} size={12} color={p.muted} />
           <GoalLine data={data} p={p} width={goalWidth} />
         </FlexWidget>
       </FlexWidget>
@@ -328,7 +328,7 @@ export function BoardWidget({ data, size, p }: P) {
   const col = (inner - 10) / 2;
   const showWeek = size.height >= 220;
   const showFooter = size.height >= 280;
-  const fixed = 24 + 44 + (showWeek ? 40 : 0) + (showFooter ? 40 : 0) + 22;
+  const fixed = 28 + 64 + (showWeek ? 46 : 0) + (showFooter ? 46 : 0) + 26;
   const rows = Math.max(1, Math.floor((size.height - PAD * 2 - fixed) / ROW));
   const next = board.deadlines[0];
   return (
@@ -337,19 +337,19 @@ export function BoardWidget({ data, size, p }: P) {
       <DuelRows data={data} p={p} width={inner} compact={false} />
       <FlexWidget style={{ width: 'match_parent', flex: 1, flexDirection: 'row', marginTop: 6 }}>
         <FlexWidget style={{ width: col, flexDirection: 'column' }}>
-          <Text p={p} text={`${me?.name} · ${me?.done}/${me?.total}`} bold size={11} color={colorOf(data.meId, p)} />
+          <Text p={p} text={`${me?.name} · ${me?.done}/${me?.total}`} bold size={13} color={colorOf(data.meId, p)} />
           <Checklist list={myOpenList(board, data.meId)} p={p} rows={rows} clickable color={colorOf(data.meId, p)} />
         </FlexWidget>
         <FlexWidget style={{ width: col, flexDirection: 'column', marginLeft: 10 }}>
-          <Text p={p} text={`${partner?.name ?? ''} · ${partner?.done ?? 0}/${partner?.total ?? 0}`} bold size={11} color={partner ? colorOf(partner.userId, p) : p.muted} />
+          <Text p={p} text={`${partner?.name ?? ''} · ${partner?.done ?? 0}/${partner?.total ?? 0}`} bold size={13} color={partner ? colorOf(partner.userId, p) : p.muted} />
           <Checklist list={partner?.items ?? []} p={p} rows={rows} clickable={false} color={partner ? colorOf(partner.userId, p) : p.muted} />
         </FlexWidget>
       </FlexWidget>
       {showWeek ? (
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-          <WeekCells data={data} p={p} cell={20} />
+          <WeekCells data={data} p={p} cell={24} />
           <FlexWidget style={{ flex: 1, alignItems: 'flex-end' }}>
-            <Text p={p} text={`🔥 ${board.sharedStreak} together`} size={10} color={p.muted} />
+            <Text p={p} text={`🔥 ${board.sharedStreak} together`} size={12} color={p.muted} />
           </FlexWidget>
         </FlexWidget>
       ) : null}
@@ -357,7 +357,7 @@ export function BoardWidget({ data, size, p }: P) {
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
           <GoalLine data={data} p={p} width={col} />
           <FlexWidget style={{ width: col, marginLeft: 10, alignItems: 'flex-end' }}>
-            <Text p={p} text={next ? `📅 ${next.name} · ${next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}` : 'No deadlines soon'} size={11} color={next && next.daysLeft <= 2 ? p.danger : p.muted} />
+            <Text p={p} text={next ? `📅 ${next.name} · ${next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}` : 'No deadlines soon'} size={13} color={next && next.daysLeft <= 2 ? p.danger : p.muted} />
           </FlexWidget>
         </FlexWidget>
       ) : null}

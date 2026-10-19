@@ -8,7 +8,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 const icon = (name: IconName) =>
   function TabBarIcon({ color, size }: { color: ColorValue; size: number }) {
-    return <Ionicons name={name} color={color as string} size={size} />;
+    return <Ionicons name={name} color={color as string} size={size + 3} />;
   };
 
 export default function TabLayout() {
@@ -23,7 +23,9 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: p.text,
         tabBarInactiveTintColor: p.muted,
-        tabBarStyle: { backgroundColor: p.card, borderTopColor: p.border },
+        tabBarStyle: { backgroundColor: p.card, borderTopColor: p.border, height: 68, paddingTop: 6 },
+        tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
+        tabBarIconStyle: { marginBottom: 2 },
         sceneStyle: { backgroundColor: p.bg },
       }}
     >

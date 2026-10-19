@@ -3,18 +3,20 @@
 import { Platform } from 'react-native';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import type { Session } from '../lib/storage';
+import { loadThemeMode } from '../lib/theme';
 import type { Board } from '../lib/types';
 import { loadMonth } from './data';
 import { renderWidget, WIDGET_NAMES } from './render';
 
-export function refreshWidgets(session: Session, board: Board) {
+export async function refreshWidgets(session: Session, board: Board) {
   if (Platform.OS !== 'android') return;
   const data = { board, meId: session.user.telegramId };
+  const mode = await loadThemeMode();
   for (const name of WIDGET_NAMES) {
     requestWidgetUpdate({
       widgetName: name,
       renderWidget: async (info) =>
-        renderWidget(name, name === 'Month' ? { ...data, month: await loadMonth(session, board.today) } : data, info),
+        renderWidget(name, name === 'Month' ? { ...data, month: await loadMonth(session, board.today) } : data, info, mode),
     }).catch(() => {});
   }
 }

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, T } from '../components/ui';
 import { defaultServerUrl } from '../lib/storage';
 import { useStore } from '../lib/store';
-import { usePalette } from '../lib/theme';
+import { type as size, usePalette } from '../lib/theme';
 
 export default function Login() {
   const p = usePalette();
@@ -34,10 +34,10 @@ export default function Login() {
     <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
       <KeyboardAvoidingView behavior="padding" style={styles.wrap}>
         <View style={{ gap: 4, marginBottom: 24 }}>
-          <T size={32} bold>Lizen</T>
+          <T size={size.xxl} bold>Lizen</T>
           <T muted>Zen & Lily, one board.</T>
         </View>
-        <T size={12} muted>Server</T>
+        <T size={size.sm} muted>Server</T>
         <TextInput
           value={serverUrl}
           onChangeText={setServerUrl}
@@ -48,7 +48,7 @@ export default function Login() {
           keyboardType="url"
           style={input}
         />
-        <T size={12} muted>Your password</T>
+        <T size={size.sm} muted>Your password</T>
         <TextInput
           value={password}
           onChangeText={setPassword}
@@ -58,7 +58,7 @@ export default function Login() {
           onSubmitEditing={submit}
           style={input}
         />
-        {error || storeError ? <T size={13} color={p.danger}>{error || storeError}</T> : null}
+        {error || storeError ? <T size={size.sm} color={p.danger}>{error || storeError}</T> : null}
         <Button label={busy ? 'Logging in…' : 'Log in'} onPress={submit} disabled={busy || !serverUrl || !password} style={{ marginTop: 8 }} />
       </KeyboardAvoidingView>
     </SafeAreaView>
