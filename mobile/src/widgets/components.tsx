@@ -88,8 +88,10 @@ function Bar({ fraction, color, p, width, height = 10 }: { fraction: number; col
 
 function Header({ p, title, right, offline }: { p: Palette; title: string; right?: string; offline?: boolean }) {
   return (
-    <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-      <Text p={p} text={title} bold flex={1} size={16} />
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+      <FlexWidget style={{ flex: 1, marginRight: 8 }}>
+        <Text p={p} text={title} bold size={16} />
+      </FlexWidget>
       {offline ? <Text p={p} text="offline · " size={12} color={p.warn} /> : null}
       {right ? <Text p={p} text={right} size={13} color={p.muted} /> : null}
       <TextWidget text="  ↻" clickAction="REFRESH" style={{ fontSize: 16, color: p.muted }} />
@@ -141,7 +143,7 @@ function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: Palette; clicka
   const meta = [counterText(o), o.time].filter(Boolean).join(' · ');
   return (
     <FlexWidget
-      clickAction={clickable && o.status !== 'excused' && !failed ? 'TOGGLE' : 'OPEN_APP'}
+      clickAction={clickable && o.status === 'pending' ? 'TOGGLE' : 'OPEN_APP'}
       clickActionData={{ taskId: o.taskId, date: o.date }}
       style={{ width: 'match_parent', height: ROW, flexDirection: 'row', alignItems: 'center' }}
     >
@@ -226,7 +228,7 @@ export function TodayWidget({ data, size, p }: P) {
   const rows = Math.max(1, Math.floor((size.height - PAD * 2 - 24) / ROW));
   return (
     <Shell p={p}>
-      <Header p={p} title={`My today · ${me?.done ?? 0}/${me?.total ?? 0}`} right={`♥ ${me?.weeklyXp ?? ''}`} offline={data.offline} />
+      <Header p={p} title={`My today  ${me?.done ?? 0}/${me?.total ?? 0}`} right={`♥ ${me?.weeklyXp ?? ''}`} offline={data.offline} />
       <Checklist list={list} p={p} rows={rows} clickable color={colorOf(data.meId, p)} />
     </Shell>
   );
@@ -333,7 +335,7 @@ export function BoardWidget({ data, size, p }: P) {
   const next = board.deadlines[0];
   return (
     <Shell p={p}>
-      <Header p={p} title={`Lizen · ${board.today.slice(5)}`} right={`${board.daysLeftInWeek}d left`} offline={data.offline} />
+      <Header p={p} title={`Lizen · ${board.today.slice(5).replace('-', '/')}`} right={`${board.daysLeftInWeek} days left`} offline={data.offline} />
       <DuelRows data={data} p={p} width={inner} compact={false} />
       <FlexWidget style={{ width: 'match_parent', flex: 1, flexDirection: 'row', marginTop: 6 }}>
         <FlexWidget style={{ width: col, flexDirection: 'column' }}>

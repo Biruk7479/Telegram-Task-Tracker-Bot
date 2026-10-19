@@ -35,7 +35,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     const taskId = String(clickActionData?.taskId ?? '');
     const date = String(clickActionData?.date ?? '');
     const target = session && cached
-      ? myOpenList(cached, session.user.telegramId).find((o) => o.taskId === taskId && o.date === date)
+      ? myOpenList(cached, session.user.telegramId).find((o) => o.taskId === taskId && o.date === date && o.status === 'pending')
       : undefined;
 
     if (session && cached && target) {

@@ -112,7 +112,8 @@ export function MemberColumn({ member, index, mine, today, onTap, onLong }: {
             <ItemRow o={o} color={color} mine={mine} onTap={() => onTap(o)} onLong={() => onLong(o)} />
           </View>
         ))}
-        {!mine && list.length ? <T size={size.xs} muted style={{ marginTop: 4 }}>Only {member.name} can tick these</T> : null}
+        {mine && list.length ? <T size={size.xs} muted style={{ marginTop: 6 }}>Tap to tick · hold for more</T> : null}
+        {!mine && list.length ? <T size={size.xs} muted style={{ marginTop: 6 }}>Only {member.name} can tick these</T> : null}
       </ScrollView>
     </Card>
   );
@@ -148,7 +149,7 @@ export function GoalCard({ goal, onAdd }: { goal: Goal; onAdd: (amount: number) 
   const value = Number(amount.replace(/,/g, ''));
   return (
     <View style={{ flex: 1 }}>
-      <PressableScale onPress={() => setOpen(true)} style={{ flex: 1 }}>
+      <PressableScale onPress={() => setOpen(true)} containerStyle={{ flex: 1 }} style={{ flex: 1 }}>
         <Card style={{ flex: 1, justifyContent: 'center', gap: 8 }}>
           <T size={size.sm} muted lines={1}>💰 {goal.name}</T>
           <T bold size={size.lg}>{shortNumber(goal.current)} <T size={size.sm} muted>/ {shortNumber(goal.target)} {goal.unit}</T></T>

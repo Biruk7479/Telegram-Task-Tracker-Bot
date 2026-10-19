@@ -69,8 +69,10 @@ export function FadeIn({ children, delay = 0, style }: { children: ReactNode; de
 }
 
 // A Pressable that dips slightly while held, so every touch is felt.
-export function PressableScale({ children, onPress, onLongPress, disabled, style }: {
-  children: ReactNode; onPress?: () => void; onLongPress?: () => void; disabled?: boolean; style?: StyleProp<ViewStyle>;
+// `containerStyle` sizes the touch area itself, e.g. { flex: 1 } to fill a row.
+export function PressableScale({ children, onPress, onLongPress, disabled, style, containerStyle }: {
+  children: ReactNode; onPress?: () => void; onLongPress?: () => void; disabled?: boolean;
+  style?: StyleProp<ViewStyle>; containerStyle?: StyleProp<ViewStyle>;
 }) {
   const scale = useState(() => new Animated.Value(1))[0];
   const to = (v: number) => Animated.spring(scale, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 6 }).start();
@@ -82,6 +84,7 @@ export function PressableScale({ children, onPress, onLongPress, disabled, style
       disabled={disabled}
       onPressIn={() => to(0.96)}
       onPressOut={() => to(1)}
+      style={containerStyle}
     >
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
