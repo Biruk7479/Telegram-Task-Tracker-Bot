@@ -62,7 +62,7 @@ export default function CalendarScreen() {
   const title = new Date(Date.UTC(cursor.y, cursor.m - 1, 1)).toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: p.bg }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.header}>
           <Pressable onPress={() => move(-1)} hitSlop={12}><T size={size.xl}>‹</T></Pressable>

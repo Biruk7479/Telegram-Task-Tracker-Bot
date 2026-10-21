@@ -44,8 +44,8 @@ function Shell({ p, children, clickAction = 'OPEN_APP' }: { p: Palette; children
     <FlexWidget
       clickAction={clickAction}
       style={{
-        height: 'match_parent', width: 'match_parent', backgroundColor: p.card,
-        borderRadius: 22, padding: PAD, flexDirection: 'column',
+        height: 'match_parent', width: 'match_parent', backgroundColor: p.widgetGlass,
+        borderRadius: 26, borderWidth: 1, borderColor: p.widgetBorder, padding: PAD, flexDirection: 'column',
       }}
     >
       {children}
@@ -80,7 +80,7 @@ function Notice({ p, text }: { p: Palette; text: string }) {
 function Bar({ fraction, color, p, width, height = 14 }: { fraction: number; color: `#${string}`; p: Palette; width: number; height?: number }) {
   const filled = Math.round(Math.max(0, Math.min(1, fraction)) * width);
   return (
-    <FlexWidget style={{ width, height, backgroundColor: p.faint, borderRadius: height / 2, flexDirection: 'row' }}>
+    <FlexWidget style={{ width, height, backgroundColor: p.widgetTrack, borderRadius: height / 2, flexDirection: 'row' }}>
       {filled > 0 ? <FlexWidget style={{ width: filled, height, backgroundColor: color, borderRadius: height / 2 }} /> : null}
     </FlexWidget>
   );
@@ -247,7 +247,7 @@ export function PartnerWidget({ data, size, p }: P) {
   return (
     <Shell p={p}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
-        <SvgWidget svg={ringSvg(partner.total ? partner.done / partner.total : 0, color, p.faint, ring, 7)} style={{ width: ring, height: ring }} />
+        <SvgWidget svg={ringSvg(partner.total ? partner.done / partner.total : 0, color, p.widgetTrack, ring, 7)} style={{ width: ring, height: ring }} />
         <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 8 }}>
           <FlexWidget style={{ flexDirection: 'row', width: 'match_parent' }}>
             <Text p={p} text={`${partner.name} · ${partner.done}/${partner.total}`} bold color={color} flex={1} />

@@ -117,12 +117,12 @@ export default function TaskForm() {
     ]);
   };
 
-  const input = [styles.input, { color: p.text, borderColor: p.border, backgroundColor: p.card }];
+  const input = [styles.input, { color: p.text, borderColor: p.border, backgroundColor: p.glass }];
 
   if (!loaded) return <ActivityIndicator style={{ marginTop: 60 }} color={p.muted} />;
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: p.bg }}>
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: 'transparent' }}>
       <Stack.Screen options={{ title: isNew ? 'New task' : 'Edit task' }} />
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <T size={size.sm} muted>Name</T>

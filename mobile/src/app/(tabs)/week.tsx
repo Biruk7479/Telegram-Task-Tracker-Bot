@@ -36,7 +36,7 @@ export default function WeekScreen() {
   const nameOf = (id?: string) => last?.scores.find((s) => s.userId === id)?.name ?? '';
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: p.bg }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
         <T size={size.xl} bold>This week</T>
         {week ? <T size={size.sm} muted>From {week.weekKey} · settles Monday 0{rules?.closeHour ?? 6}:00</T> : null}

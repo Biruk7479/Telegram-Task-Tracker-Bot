@@ -34,7 +34,7 @@ export default function BoardScreen() {
 
   if (!board || !session) {
     return (
-      <SafeAreaView style={[styles.fill, styles.center, { backgroundColor: p.bg }]}>
+      <SafeAreaView style={[styles.fill, styles.center, { backgroundColor: 'transparent' }]}>
         {error ? <T muted>{error}</T> : <ActivityIndicator color={p.text} size="large" />}
       </SafeAreaView>
     );
@@ -47,7 +47,7 @@ export default function BoardScreen() {
   const firstName = session.user.name.split(' ')[0];
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.fill, { backgroundColor: p.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.fill, { backgroundColor: 'transparent' }]}>
       <View style={styles.page}>
         <Pressable onPress={refresh} style={styles.header}>
           <View style={{ flex: 1 }}>

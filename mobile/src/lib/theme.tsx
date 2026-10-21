@@ -20,14 +20,27 @@ export interface Palette {
   zen: `#${string}`;
   lily: `#${string}`;
   state: Record<DayState, `#${string}`>;
+  // Glass: translucent fills and edges over the blurred background.
+  glass: string;
+  glassStrong: string;
+  glassBorder: string;
+  track: string;
+  backdrop: readonly [string, string, string];
+  blobs: readonly [string, string, string];
+  // Home-screen widgets can't blur, so they are translucent over the wallpaper.
+  widgetGlass: Rgba;
+  widgetBorder: Rgba;
+  widgetTrack: Rgba;
 }
+
+type Rgba = `rgba(${number}, ${number}, ${number}, ${number})`;
 
 export const light: Palette = {
   bg: '#F6F6F4',
   card: '#FFFFFF',
   border: '#E7E5E1',
   text: '#1C1B1A',
-  muted: '#77736D',
+  muted: '#5E6372',
   faint: '#EFEDEA',
   accent: '#1C1B1A',
   danger: '#D9483B',
@@ -36,7 +49,7 @@ export const light: Palette = {
   zen: '#3B6FE0',
   lily: '#2F9E6A',
   state: {
-    none: '#EFEDEA',
+    none: '#E9EBF2',
     future: '#E4ECF9',
     open: '#BFD6F6',
     perfect: '#3FB27F',
@@ -44,6 +57,15 @@ export const light: Palette = {
     miss: '#F2A39B',
     bad: '#D9483B',
   },
+  glass: 'rgba(255,255,255,0.42)',
+  glassStrong: 'rgba(255,255,255,0.86)',
+  glassBorder: 'rgba(255,255,255,0.75)',
+  track: 'rgba(30,40,80,0.10)',
+  backdrop: ['#EAF0FF', '#F4F1FF', '#ECFAF3'],
+  blobs: ['#7EA4FF', '#5FD3A0', '#FFB0C9'],
+  widgetGlass: 'rgba(255, 255, 255, 0.62)',
+  widgetBorder: 'rgba(255, 255, 255, 0.8)',
+  widgetTrack: 'rgba(30, 40, 80, 0.12)',
 };
 
 export const dark: Palette = {
@@ -51,7 +73,7 @@ export const dark: Palette = {
   card: '#1C1C1B',
   border: '#2C2B29',
   text: '#F2F1EE',
-  muted: '#9A968F',
+  muted: '#A7ABB8',
   faint: '#262523',
   accent: '#F2F1EE',
   danger: '#EF6A5D',
@@ -60,7 +82,7 @@ export const dark: Palette = {
   zen: '#6E95F0',
   lily: '#4CC28C',
   state: {
-    none: '#262523',
+    none: '#262833',
     future: '#1F2A3B',
     open: '#2C4C78',
     perfect: '#3FB27F',
@@ -68,6 +90,15 @@ export const dark: Palette = {
     miss: '#9A4A42',
     bad: '#D9483B',
   },
+  glass: 'rgba(28,30,40,0.40)',
+  glassStrong: 'rgba(24,26,36,0.92)',
+  glassBorder: 'rgba(255,255,255,0.14)',
+  track: 'rgba(255,255,255,0.10)',
+  backdrop: ['#090B14', '#0E1020', '#0A1512'],
+  blobs: ['#2F5BD8', '#1E9E6E', '#7B4BE0'],
+  widgetGlass: 'rgba(16, 18, 28, 0.6)',
+  widgetBorder: 'rgba(255, 255, 255, 0.16)',
+  widgetTrack: 'rgba(255, 255, 255, 0.14)',
 };
 
 // Type scale, sized to be read at arm's length.

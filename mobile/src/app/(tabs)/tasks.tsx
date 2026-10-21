@@ -41,7 +41,7 @@ export default function TasksScreen() {
   ].filter((s) => s.data.length);
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: p.bg }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={styles.header}>
         <T size={size.xl} bold style={{ flex: 1 }}>Tasks</T>
         <Pressable onPress={() => router.push('/task/new')} style={[styles.add, { backgroundColor: p.accent }]}>
@@ -64,7 +64,7 @@ export default function TasksScreen() {
           renderItem={({ item }) => (
             <Pressable
               onPress={() => router.push({ pathname: '/task/[id]', params: { id: item._id } })}
-              style={({ pressed }) => [styles.row, { backgroundColor: p.card, borderColor: p.border, opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [styles.row, { backgroundColor: p.glass, borderColor: p.glassBorder, opacity: pressed ? 0.7 : 1 }]}
             >
               <View style={{ flex: 1, gap: 2 }}>
                 <T bold lines={1}>{item.name}</T>
