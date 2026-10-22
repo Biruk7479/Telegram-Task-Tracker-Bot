@@ -2,28 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Surfaces follow a per-browser choice, set on <html data-surface="…">:
+ *   solid — the original opaque cards
+ *   glass — clear translucent cards over a glowing backdrop
+ *   blur  — frosted cards that blur the backdrop behind them (default)
+ * The pages keep their Tailwind classes; these rules restyle the card and
+ * panel backgrounds they already use, so every page changes together.
+ */
+
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --glass: rgba(255, 255, 255, 0.45);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 32px rgba(40, 60, 120, 0.12);
+  --blob-1: #7ea4ff;
+  --blob-2: #5fd3a0;
+  --blob-3: #ffb0c9;
+  --backdrop: linear-gradient(135deg, #eaf0ff 0%, #f4f1ff 50%, #ecfaf3 100%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+.dark {
+  --glass: rgba(28, 30, 40, 0.42);
+  --glass-strong: rgba(24, 26, 36, 0.78);
+  --glass-edge: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --blob-1: #2f5bd8;
+  --blob-2: #1e9e6e;
+  --blob-3: #7b4be0;
+  --backdrop: linear-gradient(135deg, #090b14 0%, #0e1020 50%, #0a1512 100%);
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  min-height: 100vh;
+}
+
+/* ---------- the glowing backdrop (glass and blur only) ---------- */
+
+.backdrop-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--backdrop);
+  overflow: hidden;
+}
+
+.backdrop-layer span {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  animation: drift 26s ease-in-out infinite alternate;
+}
+
+.backdrop-layer span:nth-child(1) { width: 46vmax; height: 46vmax; left: -12vmax; top: -10vmax; background: var(--blob-1); }
+.backdrop-layer span:nth-child(2) { width: 40vmax; height: 40vmax; right: -12vmax; top: 30vh; background: var(--blob-2); animation-delay: -8s; }
+.backdrop-layer span:nth-child(3) { width: 36vmax; height: 36vmax; left: 10vw; bottom: -14vmax; background: var(--blob-3); animation-delay: -16s; }
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(4vmax, -3vmax) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop-layer span { animation: none; }
+}
+
+html[data-surface='solid'] .backdrop-layer { display: none; }
+
+/* ---------- page roots become transparent so the backdrop shows ---------- */
+
+html:not([data-surface='solid']) .min-h-screen {
+  background: transparent !important;
+}
+
+/* ---------- cards, panels, headers and inputs become glass ---------- */
+
+html:not([data-surface='solid']) :is(
+  .bg-white, .bg-white\/95, .bg-gray-100, .bg-gray-50:not(.min-h-screen)
+),
+html:not([data-surface='solid']).dark :is(
+  .dark\:bg-gray-900, .dark\:bg-gray-800, .dark\:bg-gray-800\/50, .dark\:bg-gray-950\/95,
+  .dark\:bg-gray-950\/60, .dark\:bg-gray-950:not(.min-h-screen), .dark\:bg-gray-900\/50
+) {
+  background-color: var(--glass) !important;
+  border-color: var(--glass-edge) !important;
+  box-shadow: var(--glass-shadow);
+}
+
+/* the frosted version: blur whatever sits behind the card */
+html[data-surface='blur'] :is(
+  .bg-white, .bg-white\/95, .bg-gray-100, .bg-gray-50:not(.min-h-screen)
+),
+html[data-surface='blur'].dark :is(
+  .dark\:bg-gray-900, .dark\:bg-gray-800, .dark\:bg-gray-800\/50, .dark\:bg-gray-950\/95,
+  .dark\:bg-gray-950\/60, .dark\:bg-gray-950:not(.min-h-screen), .dark\:bg-gray-900\/50
+) {
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+
+/* hairline edges on glass read as light catching the pane */
+html:not([data-surface='solid']) :is(.border-gray-200, .border-gray-100, .border-gray-300),
+html:not([data-surface='solid']).dark :is(.dark\:border-gray-800, .dark\:border-gray-700, .dark\:border-gray-600) {
+  border-color: var(--glass-edge) !important;
+}
+
+/* cards feel a touch softer and lift on hover */
+html:not([data-surface='solid']) :is(.rounded-lg, .rounded-xl, .rounded-2xl):is(.p-5, .p-6, .p-8) {
+  border-radius: 1.25rem;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+html:not([data-surface='solid']) :is(.rounded-lg, .rounded-xl, .rounded-2xl):is(.p-5, .p-6, .p-8):hover {
+  transform: translateY(-2px);
 }
 
 @layer utilities {
