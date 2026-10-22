@@ -359,7 +359,7 @@ export function BoardWidget({ data, size, p }: P) {
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
           <GoalLine data={data} p={p} width={col} />
           <FlexWidget style={{ width: col, marginLeft: 10, alignItems: 'flex-end' }}>
-            <Text p={p} text={next ? `📅 ${next.name} · ${next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}` : 'No deadlines soon'} size={17} color={next && next.daysLeft <= 2 ? p.danger : p.muted} />
+            <Text p={p} text={next ? `${next.kind === 'opportunity' ? '💼' : '📅'} ${next.name} · ${next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}` : 'No deadlines soon'} size={17} color={next && next.daysLeft <= 2 ? p.danger : p.muted} />
           </FlexWidget>
         </FlexWidget>
       ) : null}

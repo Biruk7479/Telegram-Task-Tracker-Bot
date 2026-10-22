@@ -134,6 +134,40 @@ const goalSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// An opportunity with a deadline: a scholarship, internship, programme...
+// What it is, when it closes, when applications open, when you mean to
+// apply, and the list of what it asks for. Dates are 'YYYY-MM-DD' strings
+// and times 'HH:MM', so a day is the same day everywhere. Never penalized.
+const OPPORTUNITY_CATEGORIES = [
+  'Scholarship', 'Internship', 'Job', 'Fellowship', 'Competition', 'Grant',
+  'Conference', 'Programme', 'Research', 'Volunteering', 'Other',
+];
+const OPPORTUNITY_STATUSES = [
+  'Watching', 'Preparing', 'Applied', 'Interview', 'Accepted', 'Rejected', 'Missed', 'Withdrawn',
+];
+const opportunitySchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  organisation: { type: String, default: '' },
+  category: { type: String, enum: OPPORTUNITY_CATEGORIES, default: 'Other' },
+  link: { type: String, default: '' },
+  deadline: { type: String, default: null },
+  deadlineTime: { type: String, default: null },
+  applyFrom: { type: String, default: null },
+  applyOn: { type: String, default: null },
+  applyTime: { type: String, default: null },
+  requirements: [{ _id: false, text: { type: String, required: true }, done: { type: Boolean, default: false } }],
+  notes: { type: String, default: '' },
+  status: { type: String, enum: OPPORTUNITY_STATUSES, default: 'Watching' },
+  appliedOn: { type: String, default: null },
+  assignedTo: [{ type: String }],
+  createdBy: { type: String, required: true },
+  source: { type: String, default: '' },
+  active: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+opportunitySchema.index({ active: 1, deadline: 1 });
+
 // The plan's structure: owner (Li / Zen / shared "Lizen") → area → items.
 const structureSchema = new mongoose.Schema({
   owner: { type: String, enum: ['li', 'zen', 'lizen'], required: true },
@@ -157,6 +191,10 @@ const XpAdjustment = mongoose.model('XpAdjustment', xpAdjustmentSchema);
 const WeekResult = mongoose.model('WeekResult', weekResultSchema);
 const Goal = mongoose.model('Goal', goalSchema);
 const Structure = mongoose.model('Structure', structureSchema);
+const Opportunity = mongoose.model('Opportunity', opportunitySchema);
+Opportunity.CATEGORIES = OPPORTUNITY_CATEGORIES;
+Opportunity.STATUSES = OPPORTUNITY_STATUSES;
 const Meta = mongoose.model('Meta', metaSchema);
 
-module.exports = { User, Task, Completion, Occurrence, XpAdjustment, WeekResult, Goal, Structure, Meta };
+// Only models here: the tests sweep every export with deleteMany/syncIndexes.
+module.exports = { User, Task, Completion, Occurrence, XpAdjustment, WeekResult, Goal, Structure, Opportunity, Meta };

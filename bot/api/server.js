@@ -1,7 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('../database/connection');
-const { User, Task, Completion, Occurrence, Goal, Structure, WeekResult } = require('../database/models');
+const {
+  User, Task, Completion, Occurrence, Goal, Structure, WeekResult, Opportunity,
+} = require('../database/models');
+const { CATEGORIES: OPPORTUNITY_CATEGORIES, STATUSES: OPPORTUNITY_STATUSES } = Opportunity;
 const config = require('../config');
 const { signToken, checkPassword, loginLimiter, requireAuth } = require('./auth');
 const occurrences = require('../services/occurrenceService');
@@ -123,11 +126,19 @@ router.get('/api/board', handle(async (req, res) => {
     };
   }));
 
-  const deadlines = upcoming
-    .map((t) => ({
-      taskId: t._id, name: t.name, area: t.area, date: toDateKey(t.schedule.date), time: t.schedule.time,
-      assignedTo: assigneesOf(t),
-    }))
+  const opps = await Opportunity.find({
+    active: true, status: { $in: ['Watching', 'Preparing'] }, deadline: { $gte: today },
+  }).lean();
+  const deadlines = [
+    ...upcoming.map((t) => ({
+      kind: 'task', taskId: t._id, name: t.name, area: t.area, date: toDateKey(t.schedule.date),
+      time: t.schedule.time, assignedTo: assigneesOf(t),
+    })),
+    ...opps.map((o) => ({
+      kind: 'opportunity', taskId: o._id, name: o.name, area: o.category, date: o.deadline,
+      time: o.deadlineTime || undefined, assignedTo: o.assignedTo,
+    })),
+  ]
     .filter((t) => t.date >= today && daysBetween(today, t.date) <= 14)
     .map((t) => ({ ...t, daysLeft: daysBetween(today, t.date) }))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -344,6 +355,108 @@ router.put('/api/structure', requireAuth, handle(async (req, res) => {
   await Structure.deleteMany({});
   await Structure.insertMany(clean);
   res.json(await Structure.find().sort({ owner: 1, sort: 1 }).lean());
+}));
+
+// ==================== OPPORTUNITIES ====================
+//
+// Scholarships, internships, programmes: a deadline, a plan for when to
+// apply, and what each one asks for. Shared between the members like tasks,
+// but never scored. The tracker, the website and the app all edit these.
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{1,2}:\d{2}$/;
+const OPP_FIELDS = [
+  'name', 'organisation', 'category', 'link', 'deadline', 'deadlineTime', 'applyFrom', 'applyOn',
+  'applyTime', 'requirements', 'notes', 'status', 'appliedOn', 'assignedTo', 'source',
+];
+
+function cleanOpportunity(body, partial) {
+  const out = {};
+  for (const key of OPP_FIELDS) {
+    if (!(key in body)) continue;
+    let v = body[key];
+    if (['deadline', 'applyFrom', 'applyOn', 'appliedOn'].includes(key)) {
+      v = v ? String(v).slice(0, 10) : null;
+      if (v && !DATE_RE.test(v)) throw badRequest(`${key} must be YYYY-MM-DD`);
+    } else if (['deadlineTime', 'applyTime'].includes(key)) {
+      v = v ? String(v) : null;
+      if (v && !TIME_RE.test(v)) throw badRequest(`${key} must be HH:MM`);
+    } else if (key === 'requirements') {
+      if (!Array.isArray(v)) throw badRequest('requirements must be a list');
+      v = v
+        .map((r) => (typeof r === 'string' ? { text: r, done: false } : { text: String(r?.text ?? ''), done: !!r?.done }))
+        .map((r) => ({ ...r, text: r.text.trim() }))
+        .filter((r) => r.text);
+    } else if (key === 'assignedTo') {
+      if (!Array.isArray(v) || v.length === 0) throw badRequest('assignedTo must be a non-empty list');
+      v = [...new Set(v.map(String))];
+      if (!v.every(config.isMember)) throw badRequest('assignedTo must only contain members');
+    } else if (key === 'category') {
+      if (!OPPORTUNITY_CATEGORIES.includes(v)) throw badRequest('Invalid category');
+    } else if (key === 'status') {
+      if (!OPPORTUNITY_STATUSES.includes(v)) throw badRequest('Invalid status');
+    } else {
+      v = v == null ? '' : String(v);
+      if (key === 'name') v = v.trim();
+    }
+    out[key] = v;
+  }
+  if (!partial && !out.name) throw badRequest('name is required');
+  if ('name' in out && !out.name) throw badRequest('name cannot be empty');
+  return out;
+}
+
+const oppSort = (a, b) =>
+  (a.deadline == null) - (b.deadline == null) || String(a.deadline || '').localeCompare(String(b.deadline || ''))
+  || a.createdAt - b.createdAt;
+
+async function ownOpportunity(req) {
+  const opp = await Opportunity.findById(req.params.id);
+  if (!opp || !opp.active) throw occurrences.httpError(404, 'Opportunity not found');
+  if (!opp.assignedTo.includes(req.userId)) throw occurrences.httpError(403, 'Only an assignee can change this');
+  return opp;
+}
+
+router.get('/api/opportunities', handle(async (req, res) => {
+  const rows = await Opportunity.find({ active: true }).lean();
+  res.json(rows.sort(oppSort));
+}));
+
+router.post('/api/opportunities', requireAuth, handle(async (req, res) => {
+  const fields = cleanOpportunity(req.body || {}, false);
+  if (!fields.assignedTo) fields.assignedTo = [req.userId];
+  if (fields.status === 'Applied' && !fields.appliedOn) fields.appliedOn = todayKey();
+  const opp = await Opportunity.create({
+    ...fields, createdBy: req.userId, source: fields.source || req.get('X-Client') || 'api',
+  });
+  res.status(201).json(opp);
+}));
+
+router.put('/api/opportunities/:id', requireAuth, handle(async (req, res) => {
+  const opp = await ownOpportunity(req);
+  const fields = cleanOpportunity(req.body || {}, true);
+  if (fields.status === 'Applied' && !fields.appliedOn && !opp.appliedOn) fields.appliedOn = todayKey();
+  Object.assign(opp, fields, { updatedAt: new Date() });
+  await opp.save();
+  res.json(opp);
+}));
+
+router.delete('/api/opportunities/:id', requireAuth, handle(async (req, res) => {
+  const opp = await ownOpportunity(req);
+  opp.active = false;
+  opp.updatedAt = new Date();
+  await opp.save();
+  res.json({ success: true });
+}));
+
+router.post('/api/opportunities/:id/requirements/:index', requireAuth, handle(async (req, res) => {
+  const opp = await ownOpportunity(req);
+  const i = Number(req.params.index);
+  if (!Number.isInteger(i) || i < 0 || i >= opp.requirements.length) throw badRequest('No such requirement');
+  opp.requirements[i].done = !!(req.body || {}).done;
+  opp.updatedAt = new Date();
+  await opp.save();
+  res.json(opp);
 }));
 
 // ==================== CALENDAR & HISTORY ====================

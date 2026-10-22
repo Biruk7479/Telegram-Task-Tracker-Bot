@@ -59,6 +59,7 @@ export interface Deadline {
   time?: string;
   daysLeft: number;
   assignedTo: string[];
+  kind?: 'task' | 'opportunity';
 }
 
 export interface DaySummary {
@@ -113,6 +114,41 @@ export interface Task {
   mode: 'each' | 'pooled';
   area: string;
   item: string;
+}
+
+export type OpportunityCategory =
+  | 'Scholarship' | 'Internship' | 'Job' | 'Fellowship' | 'Competition' | 'Grant'
+  | 'Conference' | 'Programme' | 'Research' | 'Volunteering' | 'Other';
+
+export type OpportunityStatus =
+  | 'Watching' | 'Preparing' | 'Applied' | 'Interview' | 'Accepted' | 'Rejected' | 'Missed' | 'Withdrawn';
+
+export interface Requirement {
+  text: string;
+  done: boolean;
+}
+
+// A scholarship, internship, job, etc. with a deadline, a plan for when to
+// apply and a checklist of what it asks for. Dates are 'YYYY-MM-DD', times 'HH:MM'.
+export interface Opportunity {
+  _id: string;
+  name: string;
+  organisation: string;
+  category: OpportunityCategory;
+  link: string;
+  deadline: string | null;
+  deadlineTime: string | null;
+  applyFrom: string | null;
+  applyOn: string | null;
+  applyTime: string | null;
+  requirements: Requirement[];
+  notes: string;
+  status: OpportunityStatus;
+  appliedOn: string | null;
+  assignedTo: string[];
+  createdBy: string;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface StructureArea {

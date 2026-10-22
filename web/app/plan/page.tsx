@@ -74,6 +74,9 @@ export default function PlanPage() {
                 <span className="px-5 py-2 rounded-md text-sm font-medium bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm">
                   Plan
                 </span>
+                <Link href="/opportunities" className="px-5 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                  Opportunities
+                </Link>
                 <Link href="/rules" className="px-5 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                   Rules
                 </Link>

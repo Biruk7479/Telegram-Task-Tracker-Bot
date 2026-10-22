@@ -2,7 +2,7 @@
 // same functions work in the app and in the widget's headless task.
 import { cacheBoard, normalizeServerUrl, type Session } from './storage';
 import type {
-  Action, Board, Goal, Occurrence, RangeReport, StructureArea, Task, User, WeekReport,
+  Action, Board, Goal, Occurrence, Opportunity, RangeReport, StructureArea, Task, User, WeekReport,
 } from './types';
 
 export class ApiError extends Error {
@@ -73,6 +73,23 @@ export const updateTask = (session: Session, id: string, task: Partial<TaskInput
 
 export const deleteTask = (session: Session, id: string) =>
   request<{ success: boolean }>(session, `/api/tasks/${id}`, { method: 'DELETE' });
+
+export const fetchOpportunities = (session: Session) => request<Opportunity[]>(session, '/api/opportunities');
+
+export type OpportunityInput = Omit<Opportunity, '_id' | 'createdBy' | 'active' | 'createdAt'>;
+
+export const createOpportunity = (session: Session, opp: Partial<OpportunityInput>) =>
+  request<Opportunity>(session, '/api/opportunities', { method: 'POST', body: opp });
+
+export const updateOpportunity = (session: Session, id: string, opp: Partial<OpportunityInput>) =>
+  request<Opportunity>(session, `/api/opportunities/${id}`, { method: 'PUT', body: opp });
+
+export const deleteOpportunity = (session: Session, id: string) =>
+  request<{ success: boolean }>(session, `/api/opportunities/${id}`, { method: 'DELETE' });
+
+// Ticks or unticks one line of an opportunity's checklist.
+export const setRequirement = (session: Session, id: string, index: number, done: boolean) =>
+  request<Opportunity>(session, `/api/opportunities/${id}/requirements/${index}`, { method: 'POST', body: { done } });
 
 export const fetchStructure = (session: Session) => request<StructureArea[]>(session, '/api/structure');
 

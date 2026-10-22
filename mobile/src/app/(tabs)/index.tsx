@@ -87,7 +87,7 @@ export default function BoardScreen() {
           <Card style={{ flex: 1, justifyContent: 'center', gap: 5 }}>
             {next ? (
               <T size={size.sm} bold lines={1} color={next.daysLeft <= 2 ? p.danger : p.text}>
-                📅 {next.name} · {next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}
+                {next.kind === 'opportunity' ? '💼' : '📅'} {next.name} · {next.daysLeft === 0 ? 'today' : `${next.daysLeft}d`}
               </T>
             ) : (
               <T size={size.sm} muted>No deadlines soon</T>

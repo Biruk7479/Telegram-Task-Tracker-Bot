@@ -4,7 +4,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Appearance, useColorScheme } from 'react-native';
-import type { DayState } from './types';
+import type { DayState, OpportunityStatus } from './types';
 
 export interface Palette {
   bg: `#${string}`;
@@ -121,3 +121,21 @@ export const usePalette = () => {
 
 // Zen is user 1 on the server; members come back in that order, so index 0 = blue.
 export const memberColor = (p: Palette, index: number) => (index === 0 ? p.zen : p.lily);
+
+// Opportunity statuses: Watching grey, Preparing blue, Applied violet, Interview
+// orange, Accepted green, Rejected/Missed red, Withdrawn grey. Violet is not in the palette.
+export const statusColor = (p: Palette, status: OpportunityStatus) => {
+  switch (status) {
+    case 'Preparing': return p.zen;
+    case 'Applied': return '#7A5AF8';
+    case 'Interview': return p.warn;
+    case 'Accepted': return p.good;
+    case 'Rejected':
+    case 'Missed': return p.danger;
+    default: return p.muted;
+  }
+};
+
+// A deadline countdown: red within a day (or overdue), orange within a week, blue within a month, muted beyond.
+export const countdownColor = (p: Palette, days: number) =>
+  days <= 1 ? p.danger : days <= 7 ? p.warn : days <= 30 ? p.zen : p.muted;

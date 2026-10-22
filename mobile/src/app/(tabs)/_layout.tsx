@@ -32,6 +32,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: 'Board', tabBarIcon: icon('grid-outline') }} />
       <Tabs.Screen name="calendar" options={{ title: 'Calendar', tabBarIcon: icon('calendar-outline') }} />
       <Tabs.Screen name="tasks" options={{ title: 'Tasks', tabBarIcon: icon('list-outline') }} />
+      <Tabs.Screen name="opportunities" options={{ title: 'Opps', tabBarIcon: icon('briefcase-outline') }} />
       <Tabs.Screen name="week" options={{ title: 'Week', tabBarIcon: icon('trophy-outline') }} />
     </Tabs>
   );

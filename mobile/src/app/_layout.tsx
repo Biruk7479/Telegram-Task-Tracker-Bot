@@ -17,6 +17,10 @@ function Screens() {
         name="task/[id]"
         options={{ presentation: 'modal', headerShown: true, headerStyle: { backgroundColor: p.card }, headerTintColor: p.text }}
       />
+      <Stack.Screen
+        name="opportunity/[id]"
+        options={{ presentation: 'modal', headerShown: true, headerStyle: { backgroundColor: p.card }, headerTintColor: p.text }}
+      />
     </Stack>
     </>
   );

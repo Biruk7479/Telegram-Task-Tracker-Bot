@@ -32,7 +32,9 @@ test('api', { skip }, async (t) => {
     return { status: res.status, body: await res.json().catch(() => null) };
   };
 
-  const login = async (password) => (await call('POST', '/api/auth/login', { password })).body;
+  // One login per member for the whole file: the route allows 10 attempts per 15 minutes.
+  const sessions = {};
+  const login = async (password) => (sessions[password] ||= (await call('POST', '/api/auth/login', { password })).body);
 
   await t.test('login gives each member their own token', async () => {
     assert.equal((await call('POST', '/api/auth/login', { password: 'nope' })).status, 401);
@@ -135,6 +137,56 @@ test('api', { skip }, async (t) => {
     // Sending it again replaces rather than piles up.
     await call('PUT', '/api/structure', plan.slice(0, 1), token);
     assert.equal((await call('GET', '/api/structure')).body.length, 1);
+  });
+
+  await t.test('opportunities: shared, validated, and only an assignee edits', async () => {
+    const lily = (await login('lily-pass')).token;
+    const zen = (await login('zen-pass')).token;
+    const today = require('../bot/utils/time').todayKey();
+    const body = {
+      name: 'DAAD scholarship', organisation: 'DAAD', category: 'Scholarship', deadline: today,
+      deadlineTime: '23:59', applyOn: today, requirements: ['CV', { text: 'Transcript', done: true }, '  '],
+    };
+    assert.equal((await call('POST', '/api/opportunities', body)).status, 401);
+    assert.equal((await call('POST', '/api/opportunities', { ...body, deadline: 'soon' }, lily)).status, 400);
+    assert.equal((await call('POST', '/api/opportunities', { ...body, status: 'Maybe' }, lily)).status, 400);
+    assert.equal((await call('POST', '/api/opportunities', { name: '' }, lily)).status, 400);
+
+    const created = await call('POST', '/api/opportunities', body, lily);
+    assert.equal(created.status, 201);
+    assert.deepEqual(created.body.assignedTo, [LILY], 'defaults to the caller');
+    assert.equal(created.body.createdBy, LILY);
+    assert.deepEqual(created.body.requirements.map((r) => [r.text, r.done]), [['CV', false], ['Transcript', true]]);
+    const id = created.body._id;
+
+    const list = (await call('GET', '/api/opportunities')).body;
+    assert.equal(list.length, 1, 'reads are public');
+
+    // Zen is not an assignee: cannot edit, delete or tick.
+    assert.equal((await call('PUT', `/api/opportunities/${id}`, { notes: 'x' }, zen)).status, 403);
+    assert.equal((await call('POST', `/api/opportunities/${id}/requirements/0`, { done: true }, zen)).status, 403);
+
+    const ticked = await call('POST', `/api/opportunities/${id}/requirements/0`, { done: true }, lily);
+    assert.equal(ticked.status, 200);
+    assert.equal(ticked.body.requirements[0].done, true);
+    assert.equal((await call('POST', `/api/opportunities/${id}/requirements/9`, { done: true }, lily)).status, 400);
+
+    const applied = await call('PUT', `/api/opportunities/${id}`, { status: 'Applied', assignedTo: [LILY, ZEN] }, lily);
+    assert.equal(applied.status, 200);
+    assert.equal(applied.body.appliedOn, today, 'Applied stamps the day');
+    assert.equal((await call('PUT', `/api/opportunities/${id}`, { notes: 'now shared' }, zen)).status, 200);
+
+    // Open ones within two weeks ride along on the board's deadlines.
+    const open = await call('POST', '/api/opportunities', { name: 'Hackathon', category: 'Competition', deadline: today }, zen);
+    const board = (await call('GET', '/api/board')).body;
+    const onBoard = board.deadlines.find((d) => d.kind === 'opportunity' && d.name === 'Hackathon');
+    assert.ok(onBoard, 'opportunity deadline on the board');
+    assert.equal(onBoard.daysLeft, 0);
+    assert.ok(!board.deadlines.some((d) => d.name === 'DAAD scholarship'), 'applied ones are not deadlines any more');
+
+    assert.equal((await call('DELETE', `/api/opportunities/${open.body._id}`, null, zen)).status, 200);
+    assert.equal((await call('GET', '/api/opportunities')).body.length, 1, 'deleted ones disappear');
+    assert.equal((await call('PUT', `/api/opportunities/${open.body._id}`, { notes: 'x' }, zen)).status, 404);
   });
 
   await t.test('calendar keeps the shape the website reads, plus status', async () => {

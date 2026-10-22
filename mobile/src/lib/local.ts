@@ -1,6 +1,30 @@
 // Local previews of what the server will do with a mark, shared by the app
 // and the widgets so a tap shows its result before the network answers.
-import type { Action, Board, Occurrence, Task } from './types';
+import type { Action, Board, Occurrence, OpportunityStatus, Task } from './types';
+
+// Whole days from `today` to `date` (both 'YYYY-MM-DD'); negative once it has passed.
+export const daysUntil = (date: string, today: string) => {
+  const [y1, m1, d1] = today.slice(0, 10).split('-').map(Number);
+  const [y2, m2, d2] = date.slice(0, 10).split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+};
+
+// "today", "tomorrow", "in 5 days", "3 d overdue".
+export const countdownText = (days: number) => {
+  if (days < 0) return `${-days} d overdue`;
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  return `in ${days} days`;
+};
+
+// Today's date where the phone is, as 'YYYY-MM-DD', for when the board has not loaded.
+export const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Watching and Preparing still ask something of you; the rest are settled.
+export const isOpenOpportunity = (status: OpportunityStatus) => status === 'Watching' || status === 'Preparing';
 
 export const applyLocally = (o: Occurrence, action: Action, amount = 1): Occurrence => {
   switch (action) {
