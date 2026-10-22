@@ -1,5 +1,8 @@
 // SVG strings for the widget SvgWidget: progress rings and calendar cells
-// split diagonally between the two members.
+// split diagonally between the two members. Both carry a faint white inner
+// stroke so they read as glass tiles on the translucent widget card.
+
+const HIGHLIGHT = 'stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1"';
 
 export const ringSvg = (fraction: number, color: string, track: string, size = 40, stroke = 5) => {
   const r = (size - stroke) / 2;
@@ -9,6 +12,7 @@ export const ringSvg = (fraction: number, color: string, track: string, size = 4
 <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/>
 <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
  stroke-linecap="round" stroke-dasharray="${c * f} ${c}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
+<circle cx="${size / 2}" cy="${size / 2}" r="${r - stroke / 2 - 0.5}" fill="none" ${HIGHLIGHT}/>
 </svg>`;
 };
 
@@ -23,6 +27,7 @@ export const splitCellSvg = (a: string, b: string, size: number, ring?: string) 
 <g clip-path="url(#r)">
 <polygon points="0,0 ${s},0 0,${s}" fill="${a}"/>
 <polygon points="${s},0 ${s},${s} 0,${s}" fill="${b}"/>
-</g>${outline}
+</g>
+<rect x="0.5" y="0.5" width="${s - 1}" height="${s - 1}" rx="${s * 0.22 - 0.5}" fill="none" ${HIGHLIGHT}/>${outline}
 </svg>`;
 };

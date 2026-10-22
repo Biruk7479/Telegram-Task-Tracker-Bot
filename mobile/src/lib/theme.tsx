@@ -6,6 +6,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { Appearance, useColorScheme } from 'react-native';
 import type { DayState } from './types';
 
+// Translucent colors for the home-screen widgets, in the exact form the widget
+// library's RgbaColor type accepts: `rgba(r, g, b, a)` with a space after each comma.
+export type Rgba = `rgba(${number}, ${number}, ${number}, ${number})`;
+
 export interface Palette {
   bg: `#${string}`;
   card: `#${string}`;
@@ -27,13 +31,16 @@ export interface Palette {
   track: string;
   backdrop: readonly [string, string, string];
   blobs: readonly [string, string, string];
-  // Home-screen widgets can't blur, so they are translucent over the wallpaper.
-  widgetGlass: Rgba;
+  // Glass look for the widgets only (the app's screens keep using the keys above):
+  // a translucent gradient from `glassFrom` to `glassTo` over the wallpaper, a 1px
+  // `widgetBorder` edge, `glassPanel` for the layered rows inside, and `glassMuted`
+  // for secondary text, which needs more contrast than `muted` on a translucent card.
+  glassFrom: Rgba;
+  glassTo: Rgba;
   widgetBorder: Rgba;
-  widgetTrack: Rgba;
+  glassPanel: Rgba;
+  glassMuted: `#${string}`;
 }
-
-type Rgba = `rgba(${number}, ${number}, ${number}, ${number})`;
 
 export const light: Palette = {
   bg: '#F6F6F4',
@@ -63,9 +70,11 @@ export const light: Palette = {
   track: 'rgba(30,40,80,0.10)',
   backdrop: ['#EAF0FF', '#F4F1FF', '#ECFAF3'],
   blobs: ['#7EA4FF', '#5FD3A0', '#FFB0C9'],
-  widgetGlass: 'rgba(255, 255, 255, 0.62)',
-  widgetBorder: 'rgba(255, 255, 255, 0.8)',
-  widgetTrack: 'rgba(30, 40, 80, 0.12)',
+  glassFrom: 'rgba(255, 255, 255, 0.62)',
+  glassTo: 'rgba(255, 255, 255, 0.42)',
+  widgetBorder: 'rgba(255, 255, 255, 0.55)',
+  glassPanel: 'rgba(255, 255, 255, 0.5)',
+  glassMuted: '#5A5751',
 };
 
 export const dark: Palette = {
@@ -96,9 +105,11 @@ export const dark: Palette = {
   track: 'rgba(255,255,255,0.10)',
   backdrop: ['#090B14', '#0E1020', '#0A1512'],
   blobs: ['#2F5BD8', '#1E9E6E', '#7B4BE0'],
-  widgetGlass: 'rgba(16, 18, 28, 0.6)',
-  widgetBorder: 'rgba(255, 255, 255, 0.16)',
-  widgetTrack: 'rgba(255, 255, 255, 0.14)',
+  glassFrom: 'rgba(18, 18, 20, 0.58)',
+  glassTo: 'rgba(18, 18, 20, 0.4)',
+  widgetBorder: 'rgba(255, 255, 255, 0.18)',
+  glassPanel: 'rgba(255, 255, 255, 0.1)',
+  glassMuted: '#C2BEB7',
 };
 
 // Type scale, sized to be read at arm's length.
