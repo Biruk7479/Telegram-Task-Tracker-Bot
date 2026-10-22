@@ -170,7 +170,7 @@ export default function TaskManager({
       type: task.type,
       time: task.schedule?.time || '09:00',
       days: task.schedule?.days || [],
-      date: task.schedule?.date || '',
+      date: task.schedule?.date ? String(task.schedule.date).slice(0, 10) : '',
       assignedTo,
     });
   };
