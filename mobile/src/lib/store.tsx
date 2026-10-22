@@ -9,6 +9,7 @@ import { applyLocally, replaceOccurrence } from './local';
 import { clearSession, loadCachedBoard, loadSession, normalizeServerUrl, saveSession, type Session } from './storage';
 import type { Action, Board, Member, Occurrence } from './types';
 import { refreshWidgets } from '../widgets/refresh';
+import { syncNotifications } from './notify';
 
 interface Store {
   ready: boolean;
@@ -58,6 +59,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBoard(fresh);
       setError(null);
       refreshWidgets(s, fresh);
+      syncNotifications(s, fresh);
     } catch (err) {
       await handleError(err);
     } finally {

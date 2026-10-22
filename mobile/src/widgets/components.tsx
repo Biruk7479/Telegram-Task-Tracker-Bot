@@ -180,6 +180,19 @@ function ItemRow({ o, p, clickable, color }: { o: Occurrence; p: Palette; clicka
         </FlexWidget>
         <Text p={p} text={o.taskName} flex={1} size={18} color={done || failed ? p.glassMuted : p.text} />
         {meta ? <Text p={p} text={` ${meta}`} size={15} color={p.glassMuted} /> : null}
+        {clickable && o.status === 'pending' ? (
+          // A clear tap target: ✓ ticks it, +1 counts one more for counter tasks.
+          <FlexWidget
+            clickAction="TOGGLE"
+            clickActionData={{ taskId: o.taskId, date: o.date }}
+            style={{
+              marginLeft: 8, height: ROW - 10, width: o.target > 1 ? 50 : ROW - 10, borderRadius: (ROW - 10) / 2,
+              backgroundColor: color, justifyContent: 'center', alignItems: 'center',
+            }}
+          >
+            <TextWidget text={o.target > 1 ? '+1' : '✓'} style={{ fontSize: 17, color: '#FFFFFF', fontWeight: '700' }} />
+          </FlexWidget>
+        ) : null}
       </Panel>
     </FlexWidget>
   );

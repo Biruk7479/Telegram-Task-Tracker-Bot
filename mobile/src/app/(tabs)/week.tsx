@@ -1,21 +1,33 @@
 // This week's scores with every penalty listed, last week's result, the rules,
 // and the account.
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bar, Button, Card, Chip, T } from '../../components/ui';
 import { fetchWeek } from '../../lib/api';
+import { loadNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '../../lib/notify';
 import { useStore } from '../../lib/store';
-import { memberColor, type as size, usePalette, useThemeMode, type ThemeMode } from '../../lib/theme';
+import { memberColor, type as size, usePalette, useThemeMode, type SurfaceStyle, type ThemeMode } from '../../lib/theme';
 import type { WeekReport } from '../../lib/types';
 
 export default function WeekScreen() {
   const p = usePalette();
   const { session, board, logout, refresh } = useStore();
-  const { mode, setMode } = useThemeMode();
+  const { mode, setMode, surface, setSurface } = useThemeMode();
   const [week, setWeek] = useState<WeekReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notify, setNotify] = useState<NotifyPrefs | null>(null);
+
+  useEffect(() => { loadNotifyPrefs().then(setNotify); }, []);
+
+  const toggleNotify = async (key: keyof NotifyPrefs) => {
+    if (!notify) return;
+    const next = { ...notify, [key]: !notify[key] };
+    setNotify(next);
+    await saveNotifyPrefs(next);
+    refresh(); // re-plans the phone's reminders with the new settings
+  };
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -101,8 +113,34 @@ export default function WeekScreen() {
               />
             ))}
           </View>
-          <T size={size.xs} muted>The app and your home-screen widgets both follow this.</T>
+          <T size={size.sm} bold style={{ marginTop: 4 }}>Style</T>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {([['solid', '▢ Solid'], ['glass', '◇ Glass'], ['blur', '❄ Frosted blur']] as [SurfaceStyle, string][]).map(([v, label]) => (
+              <Chip
+                key={v}
+                label={label}
+                active={surface === v}
+                onPress={() => {
+                  setSurface(v);
+                  refresh();
+                }}
+              />
+            ))}
+          </View>
+          <T size={size.xs} muted>The app and your home-screen widgets both follow these. Widgets can’t blur, so Glass and Frosted blur both look like clear glass there.</T>
         </Card>
+
+        {notify ? (
+          <Card style={{ gap: 10 }}>
+            <T bold>Notifications</T>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              <Chip label="⏰ Task reminders" active={notify.reminders} onPress={() => toggleNotify('reminders')} />
+              <Chip label="🌙 Evening nudge" active={notify.nudge} onPress={() => toggleNotify('nudge')} />
+              <Chip label={`👀 ${board?.members.find((m) => m.userId !== session?.user.telegramId)?.name ?? 'Partner'}’s ticks`} active={notify.partner} onPress={() => toggleNotify('partner')} />
+            </View>
+            <T size={size.xs} muted>Reminders arrive at each task’s time (skipped once it’s ticked). The nudge comes at 21:30 and 05:00 while tasks are still open. Partner ticks show up when the app or widgets sync.</T>
+          </Card>
+        ) : null}
 
         <Card style={{ gap: 8 }}>
           <T size={size.sm} muted>Logged in as <T size={size.sm} bold>{session?.user.name}</T></T>

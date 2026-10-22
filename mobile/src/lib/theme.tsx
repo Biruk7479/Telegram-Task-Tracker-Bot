@@ -117,7 +117,22 @@ export const type = { xs: 13, sm: 15, md: 17, lg: 20, xl: 26, xxl: 34 } as const
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+// How cards look: opaque, clear translucent glass, or frosted glass that blurs
+// the backdrop behind it. Widgets follow too (solid, or translucent for both
+// glass styles, since home-screen widgets cannot blur).
+export type SurfaceStyle = 'solid' | 'glass' | 'blur';
+
 const THEME_KEY = 'lizen.theme';
+const STYLE_KEY = 'lizen.style';
+
+export async function loadSurfaceStyle(): Promise<SurfaceStyle> {
+  try {
+    const v = await AsyncStorage.getItem(STYLE_KEY);
+    return v === 'solid' || v === 'glass' ? v : 'blur';
+  } catch {
+    return 'blur';
+  }
+}
 
 export async function loadThemeMode(): Promise<ThemeMode> {
   try {
@@ -128,19 +143,31 @@ export async function loadThemeMode(): Promise<ThemeMode> {
   }
 }
 
-const ThemeContext = createContext<{ mode: ThemeMode; setMode: (m: ThemeMode) => void }>({
+const ThemeContext = createContext<{
+  mode: ThemeMode; setMode: (m: ThemeMode) => void;
+  surface: SurfaceStyle; setSurface: (s: SurfaceStyle) => void;
+}>({
   mode: 'system',
   setMode: () => {},
+  surface: 'blur',
+  setSurface: () => {},
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('system');
+  const [surface, setSurfaceState] = useState<SurfaceStyle>('blur');
 
   useEffect(() => {
     loadThemeMode().then((m) => {
       setModeState(m);
       Appearance.setColorScheme(m === 'system' ? 'unspecified' : m);
     });
+    loadSurfaceStyle().then(setSurfaceState);
+  }, []);
+
+  const setSurface = useCallback((v: SurfaceStyle) => {
+    setSurfaceState(v);
+    AsyncStorage.setItem(STYLE_KEY, v).catch(() => {});
   }, []);
 
   const setMode = useCallback((m: ThemeMode) => {
@@ -150,7 +177,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     AsyncStorage.setItem(THEME_KEY, m).catch(() => {});
   }, []);
 
-  return <ThemeContext.Provider value={{ mode, setMode }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ mode, setMode, surface, setSurface }}>{children}</ThemeContext.Provider>;
 }
 
 export const useThemeMode = () => useContext(ThemeContext);

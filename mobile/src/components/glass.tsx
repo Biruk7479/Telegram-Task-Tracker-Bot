@@ -5,7 +5,7 @@ import { BlurTargetView, BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createContext, useContext, useRef, type ComponentRef, type ReactNode, type RefObject } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { dark as darkPalette, usePalette } from '../lib/theme';
+import { dark as darkPalette, usePalette, useThemeMode } from '../lib/theme';
 
 type Target = RefObject<ComponentRef<typeof View> | null>;
 
@@ -42,16 +42,23 @@ function Blob({ color, size, x, y }: { color: string; size: number; x: number; y
 // Wraps the whole app: the backdrop behind, everything else on top.
 export function GlassProvider({ children }: { children: ReactNode }) {
   const p = usePalette();
+  const { surface } = useThemeMode();
   const target = useRef<ComponentRef<typeof View>>(null);
   const { width, height } = useWindowDimensions();
   const [b1, b2, b3] = p.blobs;
   return (
     <GlassContext.Provider value={target}>
       <BlurTargetView ref={target} style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={p.backdrop} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <Blob color={b1} size={width * 1.1} x={width * 0.1} y={height * 0.12} />
-        <Blob color={b2} size={width * 1.0} x={width * 0.95} y={height * 0.45} />
-        <Blob color={b3} size={width * 0.9} x={width * 0.2} y={height * 0.85} />
+        {surface === 'solid' ? (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: p.bg }]} />
+        ) : (
+          <>
+            <LinearGradient colors={p.backdrop} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <Blob color={b1} size={width * 1.1} x={width * 0.1} y={height * 0.12} />
+            <Blob color={b2} size={width * 1.0} x={width * 0.95} y={height * 0.45} />
+            <Blob color={b3} size={width * 0.9} x={width * 0.2} y={height * 0.85} />
+          </>
+        )}
       </BlurTargetView>
       {children}
     </GlassContext.Provider>
@@ -59,13 +66,19 @@ export function GlassProvider({ children }: { children: ReactNode }) {
 }
 
 // The frosted fill for a rounded container: put it first inside the container.
+// Follows the chosen style: solid = opaque card, glass = clear translucent
+// pane, blur = frosted pane that blurs the backdrop.
 export function GlassFill({ strong }: { strong?: boolean }) {
   const p = usePalette();
+  const { surface } = useThemeMode();
   const target = useContext(GlassContext);
   const isDark = p === darkPalette;
+  if (surface === 'solid') {
+    return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.card }]} />;
+  }
   return (
     <>
-      {target ? (
+      {target && surface === 'blur' ? (
         <BlurView
           blurTarget={target}
           blurMethod="dimezisBlurViewSdk31Plus"
