@@ -26,6 +26,7 @@ const STRUCTURE = [
   { owner: 'lizen', area: 'Bible study', items: ['1 chapter per day', 'Church every Sunday'] },
   { owner: 'lizen', area: 'Personal business', items: ['Saving (50k combined)', 'Ideas', 'Hackathon'] },
   // Zen — Zen only
+  { owner: 'zen', area: 'Gheero', items: [] },
   { owner: 'zen', area: 'PMs', items: [] },
   { owner: 'zen', area: 'Ethioadvise', items: [] },
 ];

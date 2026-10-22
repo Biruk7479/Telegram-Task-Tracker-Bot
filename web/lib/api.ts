@@ -77,6 +77,15 @@ export interface Completion {
   completedAt: string;
 }
 
+// The plan from the notebook: owner → area → items. See /plan.
+export interface StructureArea {
+  _id?: string;
+  owner: 'li' | 'zen' | 'lizen';
+  area: string;
+  items: string[];
+  sort?: number;
+}
+
 export interface CalendarDay {
   date: string;
   completions: {
@@ -109,6 +118,12 @@ export const apiService = {
     const response = await api.post('/api/auth/login', { password });
     auth.save(response.data.token, response.data.user);
     return response.data.user;
+  },
+
+  // The plan: who owns which area, and what is inside each
+  getStructure: async (): Promise<StructureArea[]> => {
+    const response = await api.get('/api/structure');
+    return response.data;
   },
 
   // Get all users

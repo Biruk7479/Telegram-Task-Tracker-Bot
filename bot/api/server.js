@@ -319,6 +319,33 @@ router.get('/api/structure', handle(async (req, res) => {
   res.json(await Structure.find().sort({ owner: 1, sort: 1 }).lean());
 }));
 
+// Replace the whole plan: [{ owner, area, items }], in the order given. The
+// tracker's Settings page sends this; the website and the app read it back.
+const OWNERS = ['li', 'zen', 'lizen'];
+router.put('/api/structure', requireAuth, handle(async (req, res) => {
+  const rows = Array.isArray(req.body) ? req.body : req.body?.areas;
+  if (!Array.isArray(rows) || rows.length === 0) throw badRequest('a non-empty list of areas is required');
+  const clean = rows.map((r, i) => ({
+    owner: String(r?.owner || '').toLowerCase(),
+    area: String(r?.area || '').trim(),
+    items: Array.isArray(r?.items) ? r.items.map((x) => String(x).trim()).filter(Boolean) : [],
+    sort: i,
+  }));
+  for (const r of clean) {
+    if (!OWNERS.includes(r.owner)) throw badRequest(`owner must be one of ${OWNERS.join(', ')}`);
+    if (!r.area) throw badRequest('every area needs a name');
+  }
+  const seen = new Set();
+  for (const r of clean) {
+    const key = `${r.owner}:${r.area.toLowerCase()}`;
+    if (seen.has(key)) throw badRequest(`duplicate area: ${r.area}`);
+    seen.add(key);
+  }
+  await Structure.deleteMany({});
+  await Structure.insertMany(clean);
+  res.json(await Structure.find().sort({ owner: 1, sort: 1 }).lean());
+}));
+
 // ==================== CALENDAR & HISTORY ====================
 
 const calendarEntry = (o) => ({

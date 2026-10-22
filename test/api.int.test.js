@@ -110,6 +110,33 @@ test('api', { skip }, async (t) => {
     assert.equal((await call('GET', '/api/range?from=2026-01-01&to=2026-06-01')).status, 400);
   });
 
+  await t.test('the plan can be replaced as a whole, by a member only', async () => {
+    const plan = [
+      { owner: 'li', area: 'FloLabs', items: ['IoT', 'Humanoid'] },
+      { owner: 'lizen', area: 'Bible study', items: ['1 chapter a day', 'Church (every Sunday)'] },
+      { owner: 'zen', area: 'PMS', items: [] },
+    ];
+    assert.equal((await call('PUT', '/api/structure', plan)).status, 401);
+    const { token } = await login('lily-pass');
+    assert.equal((await call('PUT', '/api/structure', [{ owner: 'nobody', area: 'x' }], token)).status, 400);
+    assert.equal((await call('PUT', '/api/structure', [{ owner: 'li', area: '' }], token)).status, 400);
+    assert.equal((await call('PUT', '/api/structure', [], token)).status, 400);
+
+    const put = await call('PUT', '/api/structure', plan, token);
+    assert.equal(put.status, 200);
+    assert.equal(put.body.length, 3);
+    const got = (await call('GET', '/api/structure')).body;
+    assert.deepEqual(got.map((a) => [a.owner, a.area, a.items]), [
+      ['li', 'FloLabs', ['IoT', 'Humanoid']],
+      ['lizen', 'Bible study', ['1 chapter a day', 'Church (every Sunday)']],
+      ['zen', 'PMS', []],
+    ]);
+
+    // Sending it again replaces rather than piles up.
+    await call('PUT', '/api/structure', plan.slice(0, 1), token);
+    assert.equal((await call('GET', '/api/structure')).body.length, 1);
+  });
+
   await t.test('calendar keeps the shape the website reads, plus status', async () => {
     const [year, month] = require('../bot/utils/time').todayKey().split('-').map(Number);
     const res = await call('GET', `/api/calendar/${LILY}?year=${year}&month=${month}`);
