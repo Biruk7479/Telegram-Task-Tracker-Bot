@@ -6,6 +6,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { Appearance, useColorScheme } from 'react-native';
 import type { DayState } from './types';
 
+// Translucent colors for the home-screen widgets, in the exact form the widget
+// library's RgbaColor type accepts: `rgba(r, g, b, a)` with a space after each comma.
+export type Rgba = `rgba(${number}, ${number}, ${number}, ${number})`;
+
 export interface Palette {
   bg: `#${string}`;
   card: `#${string}`;
@@ -20,6 +24,15 @@ export interface Palette {
   zen: `#${string}`;
   lily: `#${string}`;
   state: Record<DayState, `#${string}`>;
+  // Glass look for the widgets only (the app's screens keep using the keys above):
+  // a translucent gradient from `glassFrom` to `glassTo` over the wallpaper, a 1px
+  // `glassBorder` edge, `glassPanel` for the layered rows inside, and `glassMuted`
+  // for secondary text, which needs more contrast than `muted` on a translucent card.
+  glassFrom: Rgba;
+  glassTo: Rgba;
+  glassBorder: Rgba;
+  glassPanel: Rgba;
+  glassMuted: `#${string}`;
 }
 
 export const light: Palette = {
@@ -44,6 +57,11 @@ export const light: Palette = {
     miss: '#F2A39B',
     bad: '#D9483B',
   },
+  glassFrom: 'rgba(255, 255, 255, 0.62)',
+  glassTo: 'rgba(255, 255, 255, 0.42)',
+  glassBorder: 'rgba(255, 255, 255, 0.55)',
+  glassPanel: 'rgba(255, 255, 255, 0.5)',
+  glassMuted: '#5A5751',
 };
 
 export const dark: Palette = {
@@ -68,6 +86,11 @@ export const dark: Palette = {
     miss: '#9A4A42',
     bad: '#D9483B',
   },
+  glassFrom: 'rgba(18, 18, 20, 0.58)',
+  glassTo: 'rgba(18, 18, 20, 0.4)',
+  glassBorder: 'rgba(255, 255, 255, 0.18)',
+  glassPanel: 'rgba(255, 255, 255, 0.1)',
+  glassMuted: '#C2BEB7',
 };
 
 // Type scale, sized to be read at arm's length.
