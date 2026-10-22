@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import StylePicker from '@/components/StylePicker'
+import AppearancePanel from '@/components/AppearancePanel'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -10,9 +10,9 @@ export const metadata: Metadata = {
   description: 'Track your productivity with gamification',
 }
 
-// Applied before the first paint so the chosen card style (and dark mode,
-// which the pages save) never flashes in late.
-const boot = `try{var d=document.documentElement;d.dataset.surface=localStorage.getItem('surfaceStyle')||'blur';if(localStorage.getItem('darkMode')==='true')d.classList.add('dark')}catch(e){}`
+// Applied before the first paint so the chosen card style, colours and dark
+// mode (which the pages save) never flash in late.
+const boot = `try{var d=document.documentElement;d.dataset.surface=localStorage.getItem('surfaceStyle')||'blur';d.dataset.palette=localStorage.getItem('colorTheme')||'classic';if(localStorage.getItem('darkMode')==='true')d.classList.add('dark')}catch(e){}`
 
 export default function RootLayout({
   children,
@@ -20,18 +20,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" data-surface="blur" suppressHydrationWarning>
+    <html lang="en" data-surface="blur" data-palette="classic" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: boot }} />
       </head>
       <body className={inter.className}>
-        <div className="backdrop-layer" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <div className="backdrop-layer" aria-hidden="true" />
         {children}
-        <StylePicker />
+        <AppearancePanel />
       </body>
     </html>
   )

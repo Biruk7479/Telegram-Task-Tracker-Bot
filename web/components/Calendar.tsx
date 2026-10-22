@@ -133,7 +133,7 @@ export default function Calendar({ userId, username }: CalendarProps) {
           key={day}
           onClick={() => setSelectedDay(dayData || null)}
           className={`
-            p-2 min-h-[60px] rounded-lg cursor-pointer transition-all relative
+            p-1 sm:p-2 min-h-[48px] sm:min-h-[60px] rounded-lg cursor-pointer transition-colors relative day-cell
             ${getDayColor(dayData)}
             ${isToday ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
             ${isSelected ? 'ring-2 ring-blue-400' : ''}
@@ -160,7 +160,7 @@ export default function Calendar({ userId, username }: CalendarProps) {
     return (
       <div className="animate-pulse space-y-4 p-6 bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {[...Array(35)].map((_, i) => (
             <div key={i} className="h-24 bg-gray-100 rounded"></div>
           ))}
@@ -170,21 +170,21 @@ export default function Calendar({ userId, username }: CalendarProps) {
   }
 
   return (
-    <div className="bg-gradient-to-br from-white to-gray-50 dark:bg-gradient-to-br dark:from-gray-900 dark:to-black rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-8">
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
+    <div className="cal-card bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-4 sm:p-8">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
             <h2 className="text-xl md:text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">{username}'s Activity</h2>
             <p className="text-gray-600 dark:text-gray-300 text-sm mt-1">Track your daily consistency</p>
           </div>
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between gap-2 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 self-stretch sm:self-auto">
             <button
               onClick={previousMonth}
               className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all hover:shadow-sm text-gray-700 dark:text-gray-300"
             >
               ←
             </button>
-            <span className="px-4 font-semibold min-w-[120px] text-center text-gray-900 dark:text-white">
+            <span className="px-2 sm:px-4 font-semibold sm:min-w-[120px] text-center text-gray-900 dark:text-white whitespace-nowrap">
               {MONTHS[month - 1]} {year}
             </span>
             <button
@@ -196,15 +196,15 @@ export default function Calendar({ userId, username }: CalendarProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-2 mb-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
           {DAYS.map(day => (
-            <div key={day} className="text-center font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-wider p-2">
+            <div key={day} className="text-center font-semibold text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 uppercase tracking-wider py-2">
               {day}
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {renderCalendar()}
         </div>
       </div>
