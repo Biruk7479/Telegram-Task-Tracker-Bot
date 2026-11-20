@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
+import { GlassFill } from '../../components/glass';
 import { useStore } from '../../lib/store';
 import { usePalette } from '../../lib/theme';
 
@@ -23,10 +24,11 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: p.text,
         tabBarInactiveTintColor: p.muted,
-        tabBarStyle: { backgroundColor: p.card, borderTopColor: p.border, height: 68, paddingTop: 6 },
+        tabBarStyle: { backgroundColor: 'transparent', borderTopColor: p.glassBorder, borderTopWidth: 1, elevation: 0, height: 68, paddingTop: 6 },
+        tabBarBackground: () => <GlassFill />,
         tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
         tabBarIconStyle: { marginBottom: 2 },
-        sceneStyle: { backgroundColor: p.bg },
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Board', tabBarIcon: icon('grid-outline') }} />

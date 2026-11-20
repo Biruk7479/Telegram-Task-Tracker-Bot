@@ -29,9 +29,9 @@ export default function Login() {
     }
   };
 
-  const input = [styles.input, { color: p.text, borderColor: p.border, backgroundColor: p.card }];
+  const input = [styles.input, { color: p.text, borderColor: p.border, backgroundColor: p.glass }];
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <KeyboardAvoidingView behavior="padding" style={styles.wrap}>
         <View style={{ gap: 4, marginBottom: 24 }}>
           <T size={size.xxl} bold>Lizen</T>

@@ -4,20 +4,21 @@ import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-a
 import { mark, tapAction } from '../lib/api';
 import { applyLocally, replaceOccurrence, myOpenList } from '../lib/local';
 import { loadCachedBoard, loadSession } from '../lib/storage';
-import { loadThemeMode, type ThemeMode } from '../lib/theme';
+import { loadSurfaceStyle, loadThemeMode, type SurfaceStyle, type ThemeMode } from '../lib/theme';
 import { loadWidgetData } from './data';
+import { syncNotifications } from '../lib/notify';
 import { isWidgetName, renderWidget, WIDGET_NAMES } from './render';
 import type { WidgetData } from './components';
 
 // Redraw every other placed widget from the same fresh data.
-async function redrawOthers(except: string, data: WidgetData, mode: ThemeMode) {
+async function redrawOthers(except: string, data: WidgetData, mode: ThemeMode, style: SurfaceStyle) {
   for (const name of WIDGET_NAMES) {
     if (name === except) continue;
     await requestWidgetUpdate({
       widgetName: name,
       renderWidget: async (info) => {
         const own = name === 'Month' ? await loadWidgetData({ withMonth: true }) : data;
-        return renderWidget(name, own, info, mode);
+        return renderWidget(name, own, info, mode, style);
       },
     });
   }
@@ -28,6 +29,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   const name = widgetInfo.widgetName;
   if (!isWidgetName(name) || widgetAction === 'WIDGET_DELETED') return;
   const mode = await loadThemeMode();
+  const style = await loadSurfaceStyle();
 
   if (widgetAction === 'WIDGET_CLICK' && clickAction === 'TOGGLE') {
     const session = await loadSession();
@@ -43,7 +45,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       // Show the result straight away, then confirm with the server.
       props.renderWidget(renderWidget(name, {
         board: replaceOccurrence(cached, applyLocally(target, action)), meId: session.user.telegramId,
-      }, widgetInfo, mode));
+      }, widgetInfo, mode, style));
       try {
         await mark(session, { taskId, date, action });
       } catch {
@@ -53,8 +55,12 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   }
 
   const data = await loadWidgetData({ withMonth: name === 'Month' });
-  props.renderWidget(renderWidget(name, data, widgetInfo, mode));
+  props.renderWidget(renderWidget(name, data, widgetInfo, mode, style));
+
+  // Background updates also keep reminders and partner alerts current.
+  const session = await loadSession();
+  if (session && data.board && !data.offline) await syncNotifications(session, data.board);
 
   // A tap changes what every widget shows; keep them in step.
-  if (widgetAction === 'WIDGET_CLICK') await redrawOthers(name, data, mode);
+  if (widgetAction === 'WIDGET_CLICK') await redrawOthers(name, data, mode, style);
 }

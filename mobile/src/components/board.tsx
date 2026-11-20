@@ -158,7 +158,7 @@ export function GoalCard({ goal, onAdd }: { goal: Goal; onAdd: (amount: number) 
       </PressableScale>
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={[styles.sheet, { backgroundColor: p.card }]}>
+          <Pressable style={[styles.sheet, { backgroundColor: p.glassStrong, borderColor: p.glassBorder }]}>
             <T bold size={size.lg}>Add to {goal.name}</T>
             <TextInput
               value={amount}
@@ -167,7 +167,7 @@ export function GoalCard({ goal, onAdd }: { goal: Goal; onAdd: (amount: number) 
               placeholder={`Amount in ${goal.unit}`}
               placeholderTextColor={p.muted}
               autoFocus
-              style={[styles.input, { color: p.text, borderColor: p.border }]}
+              style={[styles.input, { color: p.text, borderColor: p.glassBorder, backgroundColor: p.glass }]}
             />
             <Button
               label={busy ? 'Saving…' : 'Add'}
@@ -206,7 +206,7 @@ export function ItemSheet({ item, excusesLeft, rules, onClose, onAction }: {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: p.card }]}>
+        <Pressable style={[styles.sheet, { backgroundColor: p.glassStrong, borderColor: p.glassBorder }]}>
           <View style={[styles.grabber, { backgroundColor: p.border }]} />
           <T bold size={size.lg}>{item.taskName}</T>
           <T size={size.sm} muted>{[item.area, item.time, counterText(item), item.mode === 'pooled' ? 'shared result' : ''].filter(Boolean).join(' · ')}</T>
@@ -225,8 +225,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
   check: { width: 28, height: 28, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { padding: 22, paddingBottom: 36, borderTopLeftRadius: 26, borderTopRightRadius: 26, gap: 6 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
+  sheet: { padding: 22, paddingBottom: 36, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, gap: 6 },
   grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, marginBottom: 10 },
   input: { height: 54, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, fontSize: size.md, marginVertical: 8 },
 });

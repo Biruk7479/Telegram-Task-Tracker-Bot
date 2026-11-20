@@ -107,6 +107,13 @@
             "extraProguardRules": "# WorkManager (used by the home-screen widgets) finds its Room database\n# implementation by class name, so those names must survive R8.\n-keep class androidx.work.impl.WorkDatabase { *; }\n-keep class androidx.work.impl.WorkDatabase_Impl { *; }\n-keepnames class * extends androidx.room.RoomDatabase\n-keep class * extends androidx.room.RoomDatabase { <init>(); }"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#3B6FE0"
+        }
       ]
     ],
     "extra": {

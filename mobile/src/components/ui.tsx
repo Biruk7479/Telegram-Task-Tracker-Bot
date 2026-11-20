@@ -7,11 +7,14 @@ import {
   type StyleProp, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { type as size, usePalette } from '../lib/theme';
+import { GlassFill } from './glass';
 
+// A frosted-glass panel: the backdrop blurred behind a translucent fill and a bright edge.
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   return (
-    <View style={[styles.card, { backgroundColor: p.card, borderColor: p.border }, style]}>
+    <View style={[styles.card, { borderColor: p.glassBorder }, style]}>
+      <GlassFill />
       {children}
     </View>
   );
@@ -40,7 +43,7 @@ export function Bar({ fraction, color, height = 12 }: { fraction: number; color:
     Animated.spring(value, { toValue: clamped, useNativeDriver: false, friction: 9, tension: 50 }).start();
   }, [clamped, value]);
   return (
-    <View style={{ height, borderRadius: height / 2, backgroundColor: p.faint, overflow: 'hidden', flex: 1 }}>
+    <View style={{ height, borderRadius: height / 2, backgroundColor: p.track, overflow: 'hidden', flex: 1 }}>
       <Animated.View
         style={{
           height,
@@ -111,13 +114,13 @@ export function Button({ label, onPress, kind = 'primary', disabled, style }: {
   label: string; onPress: () => void; kind?: 'primary' | 'ghost' | 'danger'; disabled?: boolean; style?: StyleProp<ViewStyle>;
 }) {
   const p = usePalette();
-  const bg = kind === 'primary' ? p.accent : 'transparent';
+  const bg = kind === 'primary' ? p.accent : p.glass;
   const fg = kind === 'primary' ? p.card : kind === 'danger' ? p.danger : p.text;
   return (
     <PressableScale
       onPress={onPress}
       disabled={disabled}
-      style={[styles.button, { backgroundColor: bg, borderColor: kind === 'primary' ? bg : p.border, opacity: disabled ? 0.4 : 1 }, style]}
+      style={[styles.button, { backgroundColor: bg, borderColor: kind === 'primary' ? bg : p.glassBorder, opacity: disabled ? 0.4 : 1 }, style]}
     >
       <Text style={{ color: fg, fontWeight: '700', fontSize: size.md }}>{label}</Text>
     </PressableScale>
@@ -130,7 +133,7 @@ export function Chip({ label, active, onPress, color }: { label: string; active:
   return (
     <PressableScale
       onPress={onPress}
-      style={[styles.chip, { borderColor: active ? tint : p.border, backgroundColor: active ? tint : 'transparent' }]}
+      style={[styles.chip, { borderColor: active ? tint : p.glassBorder, backgroundColor: active ? tint : p.glass }]}
     >
       <Text style={{ color: active ? p.card : p.text, fontSize: size.sm, fontWeight: active ? '700' : '500' }}>{label}</Text>
     </PressableScale>
@@ -195,9 +198,9 @@ export function Confetti({ trigger }: { trigger: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
+  card: { borderRadius: 24, borderWidth: 1, padding: 14, overflow: 'hidden' },
   tri: { position: 'absolute', width: 0, height: 0, borderColor: 'transparent' },
   center: { alignItems: 'center', justifyContent: 'center' },
   button: { height: 52, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, marginRight: 8, marginBottom: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, marginRight: 8, marginBottom: 8, overflow: 'hidden' },
 });
